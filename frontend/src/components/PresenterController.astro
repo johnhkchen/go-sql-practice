@@ -1,0 +1,1322 @@
+---
+// PresenterController Component - Step navigation control interface
+import {
+  stepToProgress,
+  progressToStep,
+  getNavigationState,
+  getNextStep,
+  getPreviousStep,
+  formatStepDisplay
+} from '../utils/stepConversion.js';
+
+interface Props {
+  sessionId: string;
+  adminToken: string;
+  presentationData: {
+    id: string;
+    name: string;
+    step_count: number;
+    step_labels: string[];
+    current_step: number;
+    progress: number;
+  };
+  className?: string;
+}
+
+const {
+  sessionId,
+  adminToken,
+  presentationData,
+  className = ''
+} = Astro.props;
+
+// API configuration
+const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
+
+// Calculate current navigation state
+const navState = getNavigationState(presentationData.current_step, presentationData.step_count);
+const currentStepDisplay = formatStepDisplay(
+  presentationData.current_step,
+  presentationData.step_count,
+  presentationData.step_labels
+);
+---
+
+<div class={`presenter-controller ${className}`}>
+  <header class="controller-header">
+    <div class="presentation-info">
+      <h2 class="presentation-title">{presentationData.name}</h2>
+      <div class="step-indicator" aria-live="polite" id="step-display">
+        {currentStepDisplay}
+      </div>
+    </div>
+
+    <div class="control-actions">
+      <button
+        type="button"
+        class="stop-button"
+        title="Stop presenting and return to dashboard"
+        aria-label="Stop presentation"
+      >
+        <span class="button-icon" aria-hidden="true">⏹️</span>
+        Stop Presenting
+      </button>
+    </div>
+  </header>
+
+  <main class="controller-main">
+    <!-- Step Navigation Controls -->
+    <section class="step-navigation" role="group" aria-labelledby="nav-heading">
+      <h3 id="nav-heading" class="section-title">Step Navigation</h3>
+
+      <!-- Previous/Next buttons -->
+      <div class="primary-controls">
+        <button
+          type="button"
+          class="nav-button prev-button"
+          aria-label="Go to previous step"
+          title="Previous step"
+          disabled={!navState.canGoPrevious}
+        >
+          <span class="button-icon" aria-hidden="true">⬅️</span>
+          Previous
+        </button>
+
+        <button
+          type="button"
+          class="nav-button next-button"
+          aria-label="Go to next step"
+          title="Next step"
+          disabled={!navState.canGoNext}
+        >
+          <span class="button-icon" aria-hidden="true">➡️</span>
+          Next
+        </button>
+      </div>
+
+      <!-- Step jump buttons -->
+      <div class="step-jumps" role="group" aria-label="Jump to specific step">
+        <span class="jumps-label">Jump to step:</span>
+        <div class="jump-buttons">
+          {Array.from({ length: presentationData.step_count }, (_, index) => (
+            <button
+              type="button"
+              class={`jump-button ${index === presentationData.current_step ? 'active' : ''}`}
+              data-step-index={index}
+              aria-label={`Jump to step ${index + 1}${presentationData.step_labels?.[index] ? `: ${presentationData.step_labels[index]}` : ''}`}
+              title={presentationData.step_labels?.[index] || `Step ${index + 1}`}
+              aria-pressed={index === presentationData.current_step}
+            >
+              {index + 1}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <!-- Fine control slider -->
+      <div class="fine-control" role="group" aria-labelledby="slider-heading">
+        <label id="slider-heading" class="slider-label">
+          Fine Control (Progress: <span id="progress-display">{presentationData.progress.toFixed(3)}</span>)
+        </label>
+        <input
+          type="range"
+          id="progress-slider"
+          min="0"
+          max="1"
+          step="0.001"
+          value={presentationData.progress}
+          class="progress-slider"
+          aria-describedby="slider-help"
+          aria-valuemin="0"
+          aria-valuemax="1"
+          aria-valuenow={presentationData.progress}
+          aria-valuetext={`${presentationData.progress.toFixed(3)} out of 1`}
+        />
+        <div id="slider-help" class="help-text">
+          Use the slider for fine-grained progress control between steps
+        </div>
+      </div>
+    </section>
+
+    <!-- Viewer URL Section -->
+    <section class="viewer-section" role="group" aria-labelledby="viewer-heading">
+      <h3 id="viewer-heading" class="section-title">Share with Audience</h3>
+      <p class="section-description">Share this URL with viewers to let them follow along:</p>
+
+      <div class="url-container">
+        <input
+          type="text"
+          id="viewer-url"
+          value={`${Astro.url.origin}/sync/${sessionId}`}
+          readonly
+          class="viewer-url-input"
+          aria-label="Viewer URL for sharing with audience"
+          aria-describedby="copy-help"
+        />
+        <button
+          type="button"
+          id="copy-button"
+          class="copy-button"
+          title="Copy viewer URL to clipboard"
+          aria-describedby="copy-help"
+        >
+          <span class="button-icon" aria-hidden="true">📋</span>
+          Copy
+        </button>
+      </div>
+      <div id="copy-help" class="help-text">
+        Click the Copy button to copy the URL to clipboard
+      </div>
+    </section>
+  </main>
+
+  <!-- Status and Feedback Area -->
+  <div class="controller-status" aria-live="polite" aria-atomic="true" id="status-area">
+    <!-- Dynamic status messages will be inserted here -->
+  </div>
+
+  <!-- Loading overlay for updates -->
+  <div class="loading-overlay" aria-hidden="true" id="loading-overlay">
+    <div class="loading-content">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <span class="loading-text">Updating presentation...</span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .presenter-controller {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: var(--space-lg);
+    background-color: var(--color-bg);
+    border-radius: 12px;
+    border: 1px solid var(--color-border);
+    position: relative;
+  }
+
+  /* Header */
+  .controller-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-xl);
+    padding-bottom: var(--space-lg);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .presentation-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .presentation-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin: 0 0 var(--space-sm) 0;
+    word-break: break-word;
+    line-height: 1.3;
+  }
+
+  .step-indicator {
+    font-size: 1.125rem;
+    color: var(--color-text);
+    font-weight: 500;
+    padding: var(--space-sm) var(--space-md);
+    background-color: var(--color-footer);
+    border-radius: 8px;
+    display: inline-block;
+  }
+
+  .control-actions {
+    flex-shrink: 0;
+    margin-left: var(--space-lg);
+  }
+
+  .stop-button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-lg);
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .stop-button:hover {
+    background-color: #dc2626;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+  }
+
+  .stop-button:active {
+    transform: translateY(0);
+  }
+
+  .stop-button:focus {
+    outline: 2px solid #ef4444;
+    outline-offset: 2px;
+  }
+
+  /* Main content */
+  .controller-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+  }
+
+  .section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin: 0 0 var(--space-md) 0;
+  }
+
+  .section-description {
+    color: var(--color-text);
+    opacity: 0.8;
+    margin: 0 0 var(--space-lg) 0;
+    line-height: 1.5;
+  }
+
+  /* Step Navigation */
+  .step-navigation {
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: var(--space-lg);
+  }
+
+  .primary-controls {
+    display: flex;
+    gap: var(--space-lg);
+    justify-content: center;
+    margin-bottom: var(--space-xl);
+  }
+
+  .nav-button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-xl);
+    background-color: var(--color-primary);
+    color: var(--color-bg);
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 140px;
+    justify-content: center;
+  }
+
+  .nav-button:hover:not(:disabled) {
+    background-color: #333;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  }
+
+  .nav-button:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+
+  .nav-button:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.6;
+  }
+
+  .nav-button:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  /* Step Jump Buttons */
+  .step-jumps {
+    margin-bottom: var(--space-xl);
+  }
+
+  .jumps-label {
+    display: block;
+    font-weight: 500;
+    color: var(--color-text);
+    margin-bottom: var(--space-sm);
+    font-size: 0.9rem;
+  }
+
+  .jump-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+  }
+
+  .jump-button {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--color-border);
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .jump-button:hover:not(.active) {
+    background-color: var(--color-footer);
+    border-color: var(--color-primary);
+    transform: translateY(-1px);
+  }
+
+  .jump-button:active {
+    transform: translateY(0);
+  }
+
+  .jump-button.active {
+    background-color: var(--color-primary);
+    color: var(--color-bg);
+    border-color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .jump-button:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  /* Fine Control Slider */
+  .fine-control {
+    margin-bottom: var(--space-lg);
+  }
+
+  .slider-label {
+    display: block;
+    font-weight: 500;
+    color: var(--color-text);
+    margin-bottom: var(--space-sm);
+    font-size: 0.9rem;
+  }
+
+  .progress-slider {
+    width: 100%;
+    height: 8px;
+    background: var(--color-border);
+    border-radius: 4px;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+    margin: var(--space-sm) 0;
+  }
+
+  .progress-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: box-shadow 0.2s ease;
+  }
+
+  .progress-slider::-webkit-slider-thumb:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .progress-slider::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .progress-slider:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  #progress-display {
+    font-family: monospace;
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  /* Viewer Section */
+  .viewer-section {
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: var(--space-lg);
+  }
+
+  .url-container {
+    display: flex;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+    position: relative;
+  }
+
+  .viewer-url-input {
+    flex: 1;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background-color: var(--color-footer);
+    font-family: monospace;
+    font-size: 0.875rem;
+    color: var(--color-text);
+    outline: none;
+  }
+
+  .viewer-url-input:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .copy-button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-lg);
+    background-color: var(--color-primary);
+    color: var(--color-bg);
+    border: none;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .copy-button:hover {
+    background-color: #333;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+
+  .copy-button:active {
+    transform: translateY(0);
+  }
+
+  .copy-button:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .copy-button.copy-success {
+    background-color: #10b981;
+  }
+
+  .copy-button.copy-error {
+    background-color: #ef4444;
+  }
+
+  /* Status Area */
+  .controller-status {
+    margin-top: var(--space-lg);
+    min-height: 24px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+  }
+
+  .status-message {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    animation: slideInUp 0.3s ease;
+  }
+
+  .status-message.success {
+    background-color: #d1fae5;
+    color: #065f46;
+    border: 1px solid #34d399;
+  }
+
+  .status-message.error {
+    background-color: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+  }
+
+  .status-message.info {
+    background-color: #dbeafe;
+    color: #1e40af;
+    border: 1px solid #60a5fa;
+  }
+
+  @keyframes slideInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Loading Overlay */
+  .loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.9);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    z-index: 100;
+  }
+
+  .loading-overlay[aria-hidden="false"] {
+    display: flex;
+  }
+
+  .loading-content {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-lg);
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--color-border);
+    border-top: 3px solid var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  .loading-text {
+    font-size: 0.9rem;
+    color: var(--color-text);
+    font-weight: 500;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  /* Common styles */
+  .button-icon {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .help-text {
+    font-size: 0.8rem;
+    color: var(--color-text);
+    opacity: 0.7;
+    margin-top: var(--space-xs);
+    line-height: 1.4;
+  }
+
+  /* Responsive design */
+  @media (max-width: 768px) {
+    .presenter-controller {
+      padding: var(--space-md);
+    }
+
+    .controller-header {
+      flex-direction: column;
+      gap: var(--space-md);
+      align-items: stretch;
+    }
+
+    .control-actions {
+      margin-left: 0;
+    }
+
+    .stop-button {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .primary-controls {
+      flex-direction: column;
+      gap: var(--space-md);
+    }
+
+    .nav-button {
+      width: 100%;
+    }
+
+    .url-container {
+      flex-direction: column;
+    }
+
+    .copy-button {
+      justify-content: center;
+    }
+
+    .jump-buttons {
+      justify-content: center;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .presentation-title {
+      font-size: 1.25rem;
+    }
+
+    .step-indicator {
+      font-size: 1rem;
+    }
+
+    .jump-button {
+      width: 36px;
+      height: 36px;
+      font-size: 0.8rem;
+    }
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .presenter-controller,
+    .step-navigation,
+    .viewer-section {
+      border-width: 2px;
+    }
+
+    .nav-button,
+    .jump-button,
+    .copy-button,
+    .stop-button {
+      border: 2px solid currentColor;
+    }
+
+    .progress-slider {
+      border: 2px solid currentColor;
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .nav-button,
+    .jump-button,
+    .copy-button,
+    .stop-button {
+      transition: none;
+    }
+
+    .nav-button:hover,
+    .jump-button:hover,
+    .copy-button:hover,
+    .stop-button:hover {
+      transform: none;
+    }
+
+    .loading-spinner {
+      animation: none;
+      border-top-color: var(--color-border);
+    }
+
+    .status-message {
+      animation: none;
+    }
+  }
+
+  /* Dark mode support */
+  @media (prefers-color-scheme: dark) {
+    .loading-overlay {
+      background-color: rgba(0, 0, 0, 0.8);
+    }
+
+    .status-message.success {
+      background-color: #064e3b;
+      color: #a7f3d0;
+      border-color: #047857;
+    }
+
+    .status-message.error {
+      background-color: #450a0a;
+      color: #fca5a5;
+      border-color: #7f1d1d;
+    }
+
+    .status-message.info {
+      background-color: #1e3a8a;
+      color: #93c5fd;
+      border-color: #3b82f6;
+    }
+  }
+</style>
+
+<script>
+  // PresenterController class - extends SyncController patterns
+  import {
+    stepToProgress,
+    progressToStep,
+    getNavigationState,
+    getNextStep,
+    getPreviousStep,
+    formatStepDisplay
+  } from '../utils/stepConversion.js';
+
+  interface PresentationData {
+    id: string;
+    name: string;
+    step_count: number;
+    step_labels: string[];
+    current_step: number;
+    progress: number;
+  }
+
+  interface NavigationState {
+    currentStep: number;
+    canGoPrevious: boolean;
+    canGoNext: boolean;
+    totalSteps: number;
+  }
+
+  class PresenterController {
+    private sessionId: string;
+    private adminToken: string;
+    private presentationData: PresentationData;
+    private apiBase: string;
+    private currentStep: number;
+    private currentProgress: number;
+    private isUpdating: boolean = false;
+    private throttleTimeout: number | null = null;
+
+    // DOM elements
+    private prevButton: HTMLButtonElement | null = null;
+    private nextButton: HTMLButtonElement | null = null;
+    private jumpButtons: NodeListOf<HTMLButtonElement> | null = null;
+    private progressSlider: HTMLInputElement | null = null;
+    private progressDisplay: HTMLSpanElement | null = null;
+    private stepDisplay: HTMLElement | null = null;
+    private copyButton: HTMLButtonElement | null = null;
+    private viewerUrlInput: HTMLInputElement | null = null;
+    private stopButton: HTMLButtonElement | null = null;
+    private statusArea: HTMLElement | null = null;
+    private loadingOverlay: HTMLElement | null = null;
+
+    constructor(sessionId: string, adminToken: string, presentationData: PresentationData, apiBase: string) {
+      this.sessionId = sessionId;
+      this.adminToken = adminToken;
+      this.presentationData = presentationData;
+      this.apiBase = apiBase;
+      this.currentStep = presentationData.current_step;
+      this.currentProgress = presentationData.progress;
+
+      this.init();
+    }
+
+    private init(): void {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => this.setupDOM());
+      } else {
+        this.setupDOM();
+      }
+    }
+
+    private setupDOM(): void {
+      // Get DOM elements
+      this.prevButton = document.querySelector('.prev-button');
+      this.nextButton = document.querySelector('.next-button');
+      this.jumpButtons = document.querySelectorAll('.jump-button');
+      this.progressSlider = document.getElementById('progress-slider') as HTMLInputElement;
+      this.progressDisplay = document.getElementById('progress-display') as HTMLSpanElement;
+      this.stepDisplay = document.getElementById('step-display');
+      this.copyButton = document.getElementById('copy-button') as HTMLButtonElement;
+      this.viewerUrlInput = document.getElementById('viewer-url') as HTMLInputElement;
+      this.stopButton = document.querySelector('.stop-button');
+      this.statusArea = document.getElementById('status-area');
+      this.loadingOverlay = document.getElementById('loading-overlay');
+
+      if (!this.validateDOMElements()) {
+        console.warn('PresenterController: Some DOM elements not found');
+        return;
+      }
+
+      this.setupEventListeners();
+      console.log('PresenterController initialized successfully');
+    }
+
+    private validateDOMElements(): boolean {
+      return !!(
+        this.prevButton && this.nextButton && this.jumpButtons &&
+        this.progressSlider && this.progressDisplay && this.stepDisplay &&
+        this.copyButton && this.viewerUrlInput && this.stopButton &&
+        this.statusArea && this.loadingOverlay
+      );
+    }
+
+    private setupEventListeners(): void {
+      // Previous/Next buttons
+      this.prevButton?.addEventListener('click', () => this.handlePrevious());
+      this.nextButton?.addEventListener('click', () => this.handleNext());
+
+      // Jump buttons
+      this.jumpButtons?.forEach((button) => {
+        button.addEventListener('click', () => {
+          const stepIndex = parseInt(button.dataset.stepIndex || '0', 10);
+          this.handleStepJump(stepIndex);
+        });
+      });
+
+      // Progress slider
+      this.progressSlider?.addEventListener('input', (e) => {
+        const target = e.target as HTMLInputElement;
+        this.handleSliderChange(parseFloat(target.value));
+      });
+
+      // Enhanced keyboard support for slider
+      this.progressSlider?.addEventListener('keydown', (e) => {
+        this.handleSliderKeyboard(e);
+      });
+
+      // Copy button
+      this.copyButton?.addEventListener('click', () => this.copyToClipboard());
+
+      // Stop presenting button
+      this.stopButton?.addEventListener('click', () => this.handleStopPresenting());
+
+      // URL input focus
+      this.viewerUrlInput?.addEventListener('focus', () => {
+        this.viewerUrlInput?.select();
+      });
+
+      console.log('Event listeners set up');
+    }
+
+    private async handlePrevious(): Promise<void> {
+      if (!this.canGoPrevious()) return;
+
+      const prevStep = getPreviousStep(this.currentStep, this.presentationData.step_count);
+      await this.updateStep(prevStep);
+    }
+
+    private async handleNext(): Promise<void> {
+      if (!this.canGoNext()) return;
+
+      const nextStep = getNextStep(this.currentStep, this.presentationData.step_count);
+      await this.updateStep(nextStep);
+    }
+
+    private async handleStepJump(stepIndex: number): Promise<void> {
+      if (stepIndex < 0 || stepIndex >= this.presentationData.step_count) {
+        console.warn('Invalid step index:', stepIndex);
+        return;
+      }
+
+      await this.updateStep(stepIndex);
+    }
+
+    private handleSliderChange(progress: number): void {
+      this.updateProgressDisplay(progress);
+      this.throttledProgressUpdate(progress);
+    }
+
+    private handleSliderKeyboard(e: KeyboardEvent): void {
+      let increment = 0;
+      const stepSize = 1 / (this.presentationData.step_count - 1);
+
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'ArrowUp':
+          increment = e.shiftKey ? stepSize : e.ctrlKey ? 0.1 : 0.001;
+          break;
+        case 'ArrowLeft':
+        case 'ArrowDown':
+          increment = e.shiftKey ? -stepSize : e.ctrlKey ? -0.1 : -0.001;
+          break;
+        case 'Home':
+          e.preventDefault();
+          this.handleSliderChange(0);
+          return;
+        case 'End':
+          e.preventDefault();
+          this.handleSliderChange(1);
+          return;
+        case 'PageUp':
+          increment = stepSize;
+          break;
+        case 'PageDown':
+          increment = -stepSize;
+          break;
+        default:
+          return;
+      }
+
+      if (increment !== 0) {
+        e.preventDefault();
+        const newValue = Math.max(0, Math.min(1, this.currentProgress + increment));
+        if (this.progressSlider) {
+          this.progressSlider.value = newValue.toString();
+        }
+        this.handleSliderChange(newValue);
+      }
+    }
+
+    private async updateStep(stepIndex: number): Promise<void> {
+      const progress = stepToProgress(stepIndex, this.presentationData.step_count);
+      await this.sendProgressUpdate(progress);
+    }
+
+    private updateProgressDisplay(progress: number): void {
+      this.currentProgress = progress;
+
+      if (this.progressDisplay) {
+        this.progressDisplay.textContent = progress.toFixed(3);
+      }
+
+      // Update slider ARIA attributes
+      if (this.progressSlider) {
+        this.progressSlider.setAttribute('aria-valuenow', progress.toString());
+        this.progressSlider.setAttribute('aria-valuetext', `${progress.toFixed(3)} out of 1`);
+      }
+
+      // Calculate current step from progress
+      const newStep = progressToStep(progress, this.presentationData.step_count);
+      this.updateStepDisplay(newStep);
+    }
+
+    private updateStepDisplay(stepIndex: number): void {
+      this.currentStep = stepIndex;
+
+      // Update step indicator
+      if (this.stepDisplay) {
+        const displayText = formatStepDisplay(
+          stepIndex,
+          this.presentationData.step_count,
+          this.presentationData.step_labels
+        );
+        this.stepDisplay.textContent = displayText;
+      }
+
+      // Update navigation button states
+      const navState = getNavigationState(stepIndex, this.presentationData.step_count);
+
+      if (this.prevButton) {
+        this.prevButton.disabled = !navState.canGoPrevious;
+      }
+
+      if (this.nextButton) {
+        this.nextButton.disabled = !navState.canGoNext;
+      }
+
+      // Update jump button states
+      this.jumpButtons?.forEach((button, index) => {
+        const isActive = index === stepIndex;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-pressed', isActive.toString());
+      });
+    }
+
+    private throttledProgressUpdate(progress: number): void {
+      if (this.throttleTimeout) {
+        clearTimeout(this.throttleTimeout);
+      }
+
+      this.throttleTimeout = setTimeout(() => {
+        this.sendProgressUpdate(progress);
+      }, 33); // ~30 updates/sec max
+    }
+
+    private async sendProgressUpdate(progress: number): Promise<void> {
+      if (this.isUpdating) {
+        console.log('Update already in progress, skipping');
+        return;
+      }
+
+      this.isUpdating = true;
+      this.showLoading(true);
+
+      try {
+        const response = await fetch(`${this.apiBase}/api/sync/${this.sessionId}/progress`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            progress: progress,
+            token: this.adminToken
+          })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('Progress updated successfully:', result);
+
+          // Update local state with server response
+          if (result.progress !== undefined) {
+            this.updateProgressDisplay(result.progress);
+            if (this.progressSlider) {
+              this.progressSlider.value = result.progress.toString();
+            }
+          }
+
+          this.showStatus('success', 'Progress updated successfully');
+
+        } else {
+          let errorMessage = 'Failed to update progress';
+
+          if (response.status === 403) {
+            errorMessage = 'Invalid admin token';
+          } else if (response.status === 404) {
+            errorMessage = 'Session not found';
+          } else if (response.status === 400) {
+            const errorData = await response.json().catch(() => ({}));
+            errorMessage = errorData.message || 'Invalid request';
+          }
+
+          this.showStatus('error', errorMessage);
+          console.error('API Error:', errorMessage);
+        }
+
+      } catch (error) {
+        console.error('Network error:', error);
+        const errorMessage = error instanceof Error && error.message.includes('fetch')
+          ? 'Unable to connect to server'
+          : 'Network error';
+        this.showStatus('error', errorMessage);
+
+      } finally {
+        this.isUpdating = false;
+        this.showLoading(false);
+      }
+    }
+
+    private async copyToClipboard(): Promise<void> {
+      if (!this.viewerUrlInput) return;
+
+      const viewerUrl = this.viewerUrlInput.value;
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(viewerUrl);
+          this.showCopyFeedback('success');
+          this.announceToScreenReader('Viewer URL copied to clipboard');
+        } else {
+          this.copyWithLegacyMethod(viewerUrl);
+        }
+      } catch (error) {
+        console.error('Copy failed:', error);
+        try {
+          this.copyWithLegacyMethod(viewerUrl);
+        } catch (fallbackError) {
+          console.error('Fallback copy also failed:', fallbackError);
+          this.showCopyFeedback('error', 'Copy failed. Please copy the URL manually.');
+        }
+      }
+    }
+
+    private copyWithLegacyMethod(text: string): void {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      textarea.style.left = '-9999px';
+      textarea.setAttribute('aria-hidden', 'true');
+
+      document.body.appendChild(textarea);
+
+      try {
+        textarea.select();
+        textarea.setSelectionRange(0, 99999);
+
+        const successful = document.execCommand('copy');
+        if (successful) {
+          this.showCopyFeedback('success');
+          this.announceToScreenReader('Viewer URL copied to clipboard');
+        } else {
+          throw new Error('execCommand copy failed');
+        }
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    }
+
+    private showCopyFeedback(type: 'success' | 'error', message?: string): void {
+      if (!this.copyButton) return;
+
+      const originalText = this.copyButton.textContent;
+
+      if (type === 'success') {
+        this.copyButton.textContent = '✓ Copied!';
+        this.copyButton.classList.add('copy-success');
+
+        setTimeout(() => {
+          if (this.copyButton) {
+            this.copyButton.textContent = originalText;
+            this.copyButton.classList.remove('copy-success');
+          }
+        }, 2000);
+
+      } else {
+        this.copyButton.textContent = '⚠ Error';
+        this.copyButton.classList.add('copy-error');
+
+        if (message) {
+          this.showStatus('error', message);
+        }
+
+        setTimeout(() => {
+          if (this.copyButton) {
+            this.copyButton.textContent = originalText;
+            this.copyButton.classList.remove('copy-error');
+          }
+        }, 3000);
+      }
+    }
+
+    private async handleStopPresenting(): Promise<void> {
+      const confirmed = confirm('Are you sure you want to stop presenting? This will end the live session.');
+
+      if (!confirmed) return;
+
+      this.showLoading(true);
+
+      try {
+        const response = await fetch(`${this.apiBase}/api/presentations/${this.presentationData.id}/stop`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            token: this.adminToken
+          })
+        });
+
+        if (response.ok) {
+          this.showStatus('success', 'Presentation stopped. Redirecting to dashboard...');
+
+          // Redirect to dashboard after brief delay
+          setTimeout(() => {
+            window.location.href = '/present';
+          }, 1500);
+
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          const errorMessage = errorData.message || `Failed to stop presentation (HTTP ${response.status})`;
+          this.showStatus('error', errorMessage);
+          console.error('Stop presentation error:', errorMessage);
+        }
+
+      } catch (error) {
+        console.error('Network error stopping presentation:', error);
+        this.showStatus('error', 'Unable to stop presentation. Please try again.');
+      } finally {
+        this.showLoading(false);
+      }
+    }
+
+    private showStatus(type: 'success' | 'error' | 'info', message: string): void {
+      if (!this.statusArea) return;
+
+      // Clear existing status
+      this.statusArea.innerHTML = '';
+
+      const statusElement = document.createElement('div');
+      statusElement.className = `status-message ${type}`;
+
+      const icon = type === 'success' ? '✓' : type === 'error' ? '⚠' : 'ℹ';
+      statusElement.innerHTML = `<span aria-hidden="true">${icon}</span> ${message}`;
+
+      this.statusArea.appendChild(statusElement);
+
+      // Auto-remove after delay
+      setTimeout(() => {
+        if (statusElement.parentNode) {
+          statusElement.remove();
+        }
+      }, type === 'success' ? 3000 : 5000);
+
+      // Announce to screen readers
+      this.announceToScreenReader(message);
+    }
+
+    private showLoading(show: boolean): void {
+      if (!this.loadingOverlay) return;
+
+      this.loadingOverlay.setAttribute('aria-hidden', show ? 'false' : 'true');
+    }
+
+    private announceToScreenReader(message: string): void {
+      const announcement = document.createElement('div');
+      announcement.setAttribute('aria-live', 'assertive');
+      announcement.setAttribute('aria-atomic', 'true');
+      announcement.style.position = 'absolute';
+      announcement.style.left = '-10000px';
+      announcement.style.width = '1px';
+      announcement.style.height = '1px';
+      announcement.style.overflow = 'hidden';
+      announcement.textContent = message;
+
+      document.body.appendChild(announcement);
+
+      setTimeout(() => {
+        if (document.body.contains(announcement)) {
+          document.body.removeChild(announcement);
+        }
+      }, 1000);
+    }
+
+    private canGoPrevious(): boolean {
+      return this.currentStep > 0;
+    }
+
+    private canGoNext(): boolean {
+      return this.currentStep < this.presentationData.step_count - 1;
+    }
+  }
+
+  // Initialize controller when script loads
+  document.addEventListener('DOMContentLoaded', () => {
+    const controller = document.querySelector('.presenter-controller');
+    if (controller) {
+      // Extract data from DOM or script variables
+      const sessionId = (window as any).presenterSessionId;
+      const adminToken = (window as any).presenterAdminToken;
+      const presentationData = (window as any).presenterData;
+      const apiBase = (window as any).PUBLIC_API_URL || 'http://localhost:8090';
+
+      if (sessionId && adminToken && presentationData) {
+        (window as any).presenterController = new PresenterController(
+          sessionId,
+          adminToken,
+          presentationData,
+          apiBase
+        );
+      } else {
+        console.warn('PresenterController: Missing required initialization data');
+      }
+    }
+  });
+</script>

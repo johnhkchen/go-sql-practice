@@ -19,17 +19,7 @@ func registerLinksView(e *core.ServeEvent) {
 func handleLinksView(e *core.RequestEvent, app core.App) error {
 	// Extract link ID from URL path
 	// URL format: /api/links/:id/view
-	// Parse path manually since PathParam may not be available
-	path := e.Request.URL.Path
-	parts := strings.Split(path, "/")
-
-	var linkId string
-	for i, part := range parts {
-		if part == "links" && i+1 < len(parts) {
-			linkId = parts[i+1]
-			break
-		}
-	}
+	linkId := extractPathParam(e.Request.URL.Path, "links")
 
 	if linkId == "" || linkId == "view" {
 		return e.JSON(400, map[string]string{

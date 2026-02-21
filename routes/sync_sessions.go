@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	TokenLength = 32  // bytes before encoding
-	ProgressMin = 0.0
-	ProgressMax = 1.0
+	syncTokenLength = 32  // bytes before encoding
+	progressMin = 0.0
+	progressMax = 1.0
 )
 
 // CreateSessionResponse is the response for creating a new sync session
@@ -45,7 +45,7 @@ func registerSyncSessions(e *core.ServeEvent) {
 // handleCreateSession creates a new sync session with an admin token
 func handleCreateSession(e *core.RequestEvent, app core.App) error {
 	// Generate admin token
-	token, err := generateAdminToken()
+	token, err := generateSyncAdminToken()
 	if err != nil {
 		return e.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to generate admin token",
@@ -85,7 +85,7 @@ func handleCreateSession(e *core.RequestEvent, app core.App) error {
 // handleUpdateProgress updates the progress of a sync session
 func handleUpdateProgress(e *core.RequestEvent, app core.App) error {
 	// Get session ID from URL
-	sessionID := e.Request.PathValue("id")
+	sessionID := extractPathParam(e.Request.URL.Path, "sync")
 
 	// Get admin token from query parameter
 	adminToken := e.Request.URL.Query().Get("token")
@@ -120,7 +120,7 @@ func handleUpdateProgress(e *core.RequestEvent, app core.App) error {
 
 	// Verify admin token (constant-time comparison)
 	storedToken := record.GetString("admin_token")
-	if !validateToken(adminToken, storedToken) {
+	if !validateSyncToken(adminToken, storedToken) {
 		return e.JSON(http.StatusForbidden, map[string]string{
 			"error": "Invalid admin token",
 		})
@@ -146,9 +146,9 @@ func handleUpdateProgress(e *core.RequestEvent, app core.App) error {
 	})
 }
 
-// generateAdminToken generates a secure random token
-func generateAdminToken() (string, error) {
-	bytes := make([]byte, TokenLength)
+// generateSyncAdminToken generates a secure random token
+func generateSyncAdminToken() (string, error) {
+	bytes := make([]byte, syncTokenLength)
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
@@ -157,14 +157,14 @@ func generateAdminToken() (string, error) {
 
 // validateProgress checks if the progress value is within valid range
 func validateProgress(progress float64) error {
-	if progress < ProgressMin || progress > ProgressMax {
-		return fmt.Errorf("progress must be between %.1f and %.1f", ProgressMin, ProgressMax)
+	if progress < progressMin || progress > progressMax {
+		return fmt.Errorf("progress must be between %.1f and %.1f", progressMin, progressMax)
 	}
 	return nil
 }
 
-// validateToken performs constant-time token comparison
-func validateToken(provided, stored string) bool {
+// validateSyncToken performs constant-time token comparison
+func validateSyncToken(provided, stored string) bool {
 	if len(provided) != len(stored) {
 		return false
 	}

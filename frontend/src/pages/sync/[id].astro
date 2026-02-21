@@ -79,6 +79,12 @@ const pageTitle = session ? `Sync Viewer - Session ${id}` : (error ? 'Error' : '
 
     {session && (
       <div class="session-container">
+        <div class="connection-status">
+          <span class="status-indicator" id="status-indicator"></span>
+          <span class="status-text" id="status-text">Connecting...</span>
+          <span class="last-update" id="last-update"></span>
+        </div>
+
         <div class="progress-section">
           <h2 id="progress-heading">Session Progress</h2>
           <div class="progress-container">
@@ -125,6 +131,168 @@ const pageTitle = session ? `Sync Viewer - Session ${id}` : (error ? 'Error' : '
   </div>
 </BaseLayout>
 
+{session && (
+  <script client:load define:vars={{ sessionId: id, initialProgress: session.progress, apiBase: API_BASE }}>
+    class SyncViewer {
+      constructor(sessionId, initialProgress, apiBase) {
+        this.sessionId = sessionId;
+        this.initialProgress = initialProgress;
+        this.apiBase = apiBase;
+        this.currentProgress = initialProgress;
+
+        // Connection state
+        this.connectionStatus = 'disconnected';
+        this.eventSource = null;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 5;
+
+        // DOM elements (will be set in init)
+        this.statusIndicator = null;
+        this.statusText = null;
+        this.lastUpdate = null;
+        this.progressBar = null;
+        this.progressLabel = null;
+
+        // Initialize when DOM is ready
+        this.init();
+      }
+
+      init() {
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', () => this.setupDOM());
+        } else {
+          this.setupDOM();
+        }
+      }
+
+      setupDOM() {
+        // Get DOM elements
+        this.statusIndicator = document.getElementById('status-indicator');
+        this.statusText = document.getElementById('status-text');
+        this.lastUpdate = document.getElementById('last-update');
+        this.progressBar = document.getElementById('progress-bar');
+        this.progressLabel = document.getElementById('progress-label');
+
+        if (!this.statusIndicator || !this.statusText || !this.progressBar) {
+          console.warn('SyncViewer: Required DOM elements not found');
+          return;
+        }
+
+        // Set initial state
+        this.updateConnectionStatus('connecting');
+        this.updateLastUpdate('Initializing...');
+
+        // Start SSE connection
+        this.connect();
+
+        console.log('SyncViewer initialized for session:', this.sessionId);
+      }
+
+      updateConnectionStatus(status) {
+        if (!this.statusIndicator || !this.statusText) return;
+
+        this.connectionStatus = status;
+
+        // Remove all status classes
+        this.statusIndicator.classList.remove('connected', 'connecting', 'disconnected');
+
+        // Add current status class
+        this.statusIndicator.classList.add(status);
+
+        // Update text
+        switch (status) {
+          case 'connected':
+            this.statusText.textContent = 'Connected';
+            break;
+          case 'connecting':
+            this.statusText.textContent = 'Connecting...';
+            break;
+          case 'disconnected':
+            this.statusText.textContent = 'Disconnected';
+            break;
+          default:
+            this.statusText.textContent = 'Unknown';
+        }
+
+        console.log('Connection status updated:', status);
+      }
+
+      updateLastUpdate(text) {
+        if (this.lastUpdate) {
+          this.lastUpdate.textContent = text;
+        }
+      }
+
+      updateProgress(progress) {
+        if (!this.progressBar || !this.progressLabel) return;
+
+        this.currentProgress = progress;
+        this.progressBar.value = progress;
+        this.progressLabel.textContent = (progress * 100).toFixed(1) + '%';
+
+        this.updateLastUpdate(`Updated ${new Date().toLocaleTimeString()}`);
+      }
+
+      connect() {
+        try {
+          // Close existing connection if any
+          if (this.eventSource) {
+            this.eventSource.close();
+          }
+
+          // Create new EventSource connection
+          this.eventSource = new EventSource(`${this.apiBase}/api/realtime`);
+
+          // Set up event handlers
+          this.eventSource.onopen = () => this.handleConnect();
+          this.eventSource.onmessage = (event) => this.handleMessage(event);
+          this.eventSource.onerror = () => this.handleError();
+
+          console.log('SSE connection established to:', `${this.apiBase}/api/realtime`);
+        } catch (error) {
+          console.error('Failed to create SSE connection:', error);
+          this.handleError();
+        }
+      }
+
+      handleConnect() {
+        console.log('SSE connection opened');
+        this.updateConnectionStatus('connected');
+        this.updateLastUpdate('Connected');
+        this.reconnectAttempts = 0; // Reset reconnect counter
+      }
+
+      handleMessage(event) {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('SSE message received:', data);
+
+          // Filter for sync_sessions collection updates to our session
+          if (data.collection === 'sync_sessions' &&
+              data.action === 'update' &&
+              data.record &&
+              data.record.id === this.sessionId) {
+
+            console.log('Progress update received:', data.record.progress);
+            this.updateProgress(data.record.progress);
+          }
+        } catch (error) {
+          console.warn('Invalid SSE message:', error);
+        }
+      }
+
+      handleError() {
+        console.log('SSE connection error or closed');
+        this.updateConnectionStatus('disconnected');
+        this.updateLastUpdate('Connection lost');
+      }
+    }
+
+    // Initialize the sync viewer
+    window.syncViewer = new SyncViewer(sessionId, initialProgress, apiBase);
+  </script>
+)}
+
 <style>
   .sync-viewer-container {
     max-width: 800px;
@@ -170,6 +338,63 @@ const pageTitle = session ? `Sync Viewer - Session ${id}` : (error ? 'Error' : '
   .back-link:hover {
     background-color: var(--color-footer);
     text-decoration: none;
+  }
+
+  /* Connection Status */
+  .connection-status {
+    background-color: var(--color-footer);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: var(--space-md) var(--space-lg);
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    margin-bottom: var(--space-lg);
+  }
+
+  .status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+  }
+
+  .status-indicator.connected {
+    background-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+  }
+
+  .status-indicator.connecting {
+    background-color: #f59e0b;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+    animation: pulse 2s infinite;
+  }
+
+  .status-indicator.disconnected {
+    background-color: #ef4444;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2);
+  }
+
+  .status-text {
+    font-weight: 500;
+    font-size: 0.875rem;
+  }
+
+  .last-update {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--color-text);
+    opacity: 0.7;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
   }
 
   /* Session Content */
@@ -295,6 +520,32 @@ const pageTitle = session ? `Sync Viewer - Session ${id}` : (error ? 'Error' : '
 
     .info-grid {
       grid-template-columns: 1fr;
+    }
+
+    .progress-container {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-md);
+    }
+
+    .progress-label {
+      text-align: center;
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .progress-bar,
+    .progress-bar::-webkit-progress-value {
+      transition: none;
+    }
+
+    .status-indicator.connecting {
+      animation: none;
+    }
+
+    .status-indicator {
+      transition: none;
     }
   }
 </style>

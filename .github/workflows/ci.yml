@@ -1,0 +1,56 @@
+name: CI
+
+# This workflow validates the project builds cleanly in a fresh environment
+# Triggers on push to main and pull requests targeting main
+# Uses existing Makefile targets for consistency with local development
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go 1.26
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Build frontend
+        run: make frontend
+
+      - name: Build backend
+        run: make backend
+
+      - name: Validate build
+        run: make validate-build
+
+      - name: Run tests
+        run: make test
+
+      - name: Smoke test binary
+        run: |
+          ./go-sql-practice --help || (echo "Binary smoke test failed" && exit 1)
+
+      - name: Check for uncommitted changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Build process generated uncommitted changes:"
+            git status --porcelain
+            exit 1
+          fi

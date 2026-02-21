@@ -611,6 +611,10 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10;
 
+        // Debouncing and error handling
+        this.lastStateChangeTime = 0;
+        this.stateChangeDebounceMs = 500;
+
         // DOM elements
         this.container = document.getElementById('presentation-container');
         this.statusIndicator = document.getElementById('status-indicator');
@@ -627,6 +631,14 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
         this.currentStep = progressToStep(this.currentProgress, this.stepCount);
         this.updateConnectionStatus('connecting');
         this.updateLastUpdate('Initializing...');
+
+        // Update connection status based on initial state
+        setTimeout(() => {
+          if (this.currentState === 'waiting') {
+            this.updateConnectionStatus('connected');
+            this.updateLastUpdate('Waiting for presenter to start');
+          }
+        }, 1000);
         this.setupEventListeners();
         this.connect();
         console.log('PresentationAutoViewer initialized for presentation:', this.presentationId, 'Initial state:', this.currentState);
@@ -643,6 +655,14 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
 
       transitionToState(newState, transitionMessage = null) {
         if (this.currentState === newState) return;
+
+        // Debouncing: prevent rapid state changes
+        const now = Date.now();
+        if (now - this.lastStateChangeTime < this.stateChangeDebounceMs) {
+          console.log(`State change debounced: ${this.currentState} -> ${newState}`);
+          return;
+        }
+        this.lastStateChangeTime = now;
 
         console.log(`Transitioning from ${this.currentState} to ${newState}`);
 
@@ -682,13 +702,21 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
 
         switch (status) {
           case 'connected':
-            this.statusText.textContent = 'Connected';
+            if (this.currentState === 'waiting') {
+              this.statusText.textContent = 'Waiting for presenter';
+            } else {
+              this.statusText.textContent = 'Connected';
+            }
             break;
           case 'connecting':
             this.statusText.textContent = 'Connecting...';
             break;
           case 'disconnected':
-            this.statusText.textContent = 'Disconnected';
+            if (this.currentState === 'ended') {
+              this.statusText.textContent = 'Presentation ended';
+            } else {
+              this.statusText.textContent = 'Disconnected';
+            }
             break;
         }
       }
@@ -717,6 +745,60 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
         this.updateConnectionStatus('connected');
         this.updateLastUpdate('Connected');
         this.reconnectAttempts = 0;
+
+        // Sync with current server state on connection (handles mid-session joins)
+        this.syncWithServerState();
+      }
+
+      async syncWithServerState() {
+        try {
+          const response = await fetch(`${this.apiBase}/api/presentations/${this.presentationId}/status`);
+          if (response.ok) {
+            const serverPresentation = await response.json();
+            console.log('Server state sync:', serverPresentation);
+
+            // Check if server state differs from our current state
+            const serverHasActiveSession = serverPresentation.active_session !== null;
+            const clientInWaitingState = this.currentState === 'waiting';
+            const clientInLiveState = this.currentState === 'live' || this.currentState === 'starting';
+
+            // Mid-session join: server has active session but client is in waiting
+            if (serverHasActiveSession && clientInWaitingState) {
+              console.log('Mid-session join detected - transitioning to live');
+              this.sessionId = serverPresentation.active_session;
+              this.currentProgress = serverPresentation.progress || 0;
+
+              this.transitionToState('starting', 'Joining live presentation...');
+
+              setTimeout(() => {
+                this.transitionToState('live');
+                this.updateProgress(serverPresentation.progress || 0);
+                this.updateConnectionStatus('connected');
+                this.updateLastUpdate('Joined live presentation');
+              }, 1500);
+            }
+
+            // Session ended: server has no session but client thinks it's live
+            else if (!serverHasActiveSession && clientInLiveState) {
+              console.log('Session ended detected - transitioning to ended');
+              this.transitionToState('ended');
+              this.updateConnectionStatus('disconnected');
+              this.updateLastUpdate('Presentation has ended');
+              this.sessionId = null;
+            }
+
+            // Update progress if we're in live state and progress differs
+            else if (serverHasActiveSession && clientInLiveState &&
+                     this.sessionId === serverPresentation.active_session &&
+                     Math.abs((serverPresentation.progress || 0) - this.currentProgress) > 0.01) {
+              console.log('Progress sync required');
+              this.updateProgress(serverPresentation.progress || 0);
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to sync with server state:', error);
+          // Don't fail silently, but also don't break the experience
+        }
       }
 
       handleMessage(event) {

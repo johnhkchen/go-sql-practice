@@ -6,7 +6,7 @@ import (
 	"io/fs"
 )
 
-//go:embed ../../frontend/dist/*
+//go:embed frontend/dist/*
 var frontendFiles embed.FS
 
 func GetFrontendFS() (fs.FS, error) {

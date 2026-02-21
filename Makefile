@@ -24,7 +24,13 @@ backend: frontend
 		echo "Error: Frontend not built. Run 'make frontend' first."; \
 		exit 1; \
 	fi
-	flox activate -- go build -o $(BINARY_NAME)
+	@if command -v flox >/dev/null 2>&1; then \
+		echo "Building with Flox environment..."; \
+		flox activate -- go build -o $(BINARY_NAME); \
+	else \
+		echo "Building with system Go..."; \
+		go build -o $(BINARY_NAME); \
+	fi
 	@echo "Backend build complete"
 
 clean:
@@ -41,7 +47,11 @@ dev: build
 	./$(BINARY_NAME) serve --http="$(SERVER_PORT)"
 
 test:
-	flox activate -- go test ./...
+	@if command -v flox >/dev/null 2>&1; then \
+		flox activate -- go test ./...; \
+	else \
+		go test ./...; \
+	fi
 
 validate-build:
 	@echo "Validating build artifacts..."

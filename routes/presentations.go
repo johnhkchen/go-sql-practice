@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
-	"encoding/json"
+	// "encoding/json"  // TODO: Re-enable if JSON operations are added
 	"fmt"
 	"net/http"
 
@@ -182,7 +182,7 @@ func validateToken(provided, stored string) bool {
 
 func handleGetStatus(e *core.RequestEvent, app core.App) error {
 	// Get presentation ID from URL
-	presentationID := e.Request.PathValue("id")
+	presentationID := extractPathParam(e.Request.URL.Path, "presentations")
 	if presentationID == "" {
 		return e.JSON(http.StatusBadRequest, map[string]string{
 			"error": "Missing presentation ID",
@@ -216,7 +216,7 @@ func handleGetStatus(e *core.RequestEvent, app core.App) error {
 
 func handleStopLive(e *core.RequestEvent, app core.App) error {
 	// Get presentation ID from URL
-	presentationID := e.Request.PathValue("id")
+	presentationID := extractPathParam(e.Request.URL.Path, "presentations")
 	if presentationID == "" {
 		return e.JSON(http.StatusBadRequest, map[string]string{
 			"error": "Missing presentation ID",
@@ -274,7 +274,7 @@ func handleStopLive(e *core.RequestEvent, app core.App) error {
 
 func handleStartLive(e *core.RequestEvent, app core.App) error {
 	// Get presentation ID from URL
-	presentationID := e.Request.PathValue("id")
+	presentationID := extractPathParam(e.Request.URL.Path, "presentations")
 	if presentationID == "" {
 		return e.JSON(http.StatusBadRequest, map[string]string{
 			"error": "Missing presentation ID",
