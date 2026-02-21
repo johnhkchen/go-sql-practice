@@ -212,15 +212,145 @@ func handleGetStatus(e *core.RequestEvent, app core.App) error {
 }
 
 func handleStopLive(e *core.RequestEvent, app core.App) error {
-	// TODO: Implement in Step 3
-	return e.JSON(http.StatusNotImplemented, map[string]string{
-		"error": "Stop endpoint not yet implemented",
-	})
+	// Get presentation ID from URL
+	presentationID := e.Request.PathValue("id")
+	if presentationID == "" {
+		return e.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Missing presentation ID",
+		})
+	}
+
+	// Authenticate user
+	user, err := getAuthenticatedUser(e)
+	if err != nil {
+		return e.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "Authentication required",
+		})
+	}
+
+	// Find the presentation record
+	presentation, err := app.FindRecordById("presentations", presentationID)
+	if err != nil {
+		return e.JSON(http.StatusNotFound, map[string]string{
+			"error": "Presentation not found",
+		})
+	}
+
+	// Check ownership
+	if err := checkPresentationOwnership(presentation, user); err != nil {
+		return e.JSON(http.StatusForbidden, map[string]string{
+			"error": "Not authorized to control this presentation",
+		})
+	}
+
+	// Check if presentation is currently live
+	activeSessionID := presentation.GetString("active_session")
+	if activeSessionID == "" {
+		return e.JSON(http.StatusConflict, map[string]string{
+			"error": "Presentation is not currently live",
+		})
+	}
+
+	// Clear the active session
+	presentation.Set("active_session", "")
+
+	// Save the updated presentation
+	if err := app.Save(presentation); err != nil {
+		return e.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to stop presentation",
+		})
+	}
+
+	// Return success response
+	response := StopLiveResponse{
+		Message: "Presentation stopped successfully",
+	}
+
+	return e.JSON(http.StatusOK, response)
 }
 
 func handleStartLive(e *core.RequestEvent, app core.App) error {
-	// TODO: Implement in Step 4
-	return e.JSON(http.StatusNotImplemented, map[string]string{
-		"error": "Start live endpoint not yet implemented",
-	})
+	// Get presentation ID from URL
+	presentationID := e.Request.PathValue("id")
+	if presentationID == "" {
+		return e.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Missing presentation ID",
+		})
+	}
+
+	// Authenticate user
+	user, err := getAuthenticatedUser(e)
+	if err != nil {
+		return e.JSON(http.StatusUnauthorized, map[string]string{
+			"error": "Authentication required",
+		})
+	}
+
+	// Find the presentation record
+	presentation, err := app.FindRecordById("presentations", presentationID)
+	if err != nil {
+		return e.JSON(http.StatusNotFound, map[string]string{
+			"error": "Presentation not found",
+		})
+	}
+
+	// Check ownership
+	if err := checkPresentationOwnership(presentation, user); err != nil {
+		return e.JSON(http.StatusForbidden, map[string]string{
+			"error": "Not authorized to control this presentation",
+		})
+	}
+
+	// Check if presentation is already live
+	activeSessionID := presentation.GetString("active_session")
+	if activeSessionID != "" {
+		return e.JSON(http.StatusConflict, map[string]string{
+			"error": "Presentation is already live",
+		})
+	}
+
+	// Generate admin token
+	adminToken, err := generateAdminToken()
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to generate admin token",
+		})
+	}
+
+	// Get the sync_sessions collection
+	collection, err := app.FindCollectionByNameOrId("sync_sessions")
+	if err != nil {
+		return e.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to find sync_sessions collection",
+		})
+	}
+
+	// Create new sync session record
+	session := core.NewRecord(collection)
+	session.Set("progress", 0.0)
+	session.Set("admin_token", adminToken)
+
+	// Save the session record
+	if err := app.Save(session); err != nil {
+		return e.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to create sync session",
+		})
+	}
+
+	// Update presentation with active session
+	presentation.Set("active_session", session.Id)
+
+	// Save the updated presentation
+	if err := app.Save(presentation); err != nil {
+		// If presentation update fails, we have an orphaned session
+		// For now, accept this as acceptable risk per design decision
+		return e.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "Failed to link session to presentation",
+		})
+	}
+
+	// Build response with URLs and metadata
+	response := buildStartLiveResponse(session, presentation, adminToken)
+
+	return e.JSON(http.StatusCreated, response)
 }

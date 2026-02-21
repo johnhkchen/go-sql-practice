@@ -26,16 +26,28 @@ Following the planned implementation steps from plan.md.
 - Added active session resolution with orphan handling
 - Returns enhanced presentation data with computed live status fields
 
+### Step 3: Stop Endpoint (POST /stop) ✅
+- Implemented handleStopLive function
+- Added authentication and ownership validation
+- Validates presentation is currently live before stopping
+- Clears active_session relationship and returns success
+
+### Step 4: Live Endpoint (POST /live) ✅
+- Implemented handleStartLive function
+- Added authentication and ownership validation
+- Creates new sync session with admin token
+- Links session to presentation atomically
+- Returns session metadata and URLs
+
 ## Current Step
 
-**Step 3: Stop Endpoint (POST /stop)** - Ready to implement
-- Will add authentication and ownership validation
-- Simple state change operation
+**Step 5: Integration Testing** - Ready to begin
+- Test complete presentation lifecycle workflow
+- Verify frontend compatibility
+- Test error conditions and edge cases
 
 ## Remaining Steps
 
-- Step 4: Live Endpoint (POST /live)
-- Step 5: Integration Testing
 - Step 6: Documentation and Cleanup
 
 ## Notes
