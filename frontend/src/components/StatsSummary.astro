@@ -63,6 +63,140 @@ export interface StatsState {
   </div>
 </div>
 
+<script>
+  // TypeScript interfaces for client-side
+  interface StatsData {
+    total_links: number;
+    total_tags: number;
+    total_views: number;
+    top_tags: Array<{
+      name: string;
+      slug: string;
+      link_count: number;
+    }>;
+    most_viewed: Array<{
+      id: string;
+      title: string;
+      url: string;
+      view_count: number;
+    }>;
+  }
+
+  interface StatsState {
+    loading: boolean;
+    error: string | null;
+    data: StatsData | null;
+  }
+
+  class StatsController {
+    private state: StatsState;
+    private container: HTMLElement;
+
+    constructor() {
+      this.state = {
+        loading: true,
+        error: null,
+        data: null
+      };
+
+      this.container = document.getElementById('stats-container');
+      if (!this.container) {
+        console.error('Stats container not found');
+        return;
+      }
+
+      this.init();
+    }
+
+    private async init() {
+      console.log('Initializing StatsController');
+      await this.fetchStats();
+    }
+
+    private async fetchStats() {
+      console.log('Fetching stats from API...');
+
+      try {
+        this.setState({ loading: true, error: null });
+
+        const response = await fetch('http://127.0.0.1:8094/api/stats', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('Stats data received:', data);
+
+        // Validate data structure
+        if (!this.isValidStatsData(data)) {
+          throw new Error('Invalid data format received from API');
+        }
+
+        this.setState({
+          loading: false,
+          error: null,
+          data: data as StatsData
+        });
+
+      } catch (error) {
+        console.error('Error fetching stats:', error);
+        this.setState({
+          loading: false,
+          error: error instanceof Error ? error.message : 'Failed to load statistics',
+          data: null
+        });
+      }
+    }
+
+    private isValidStatsData(data: any): data is StatsData {
+      return (
+        typeof data === 'object' &&
+        data !== null &&
+        typeof data.total_links === 'number' &&
+        typeof data.total_tags === 'number' &&
+        typeof data.total_views === 'number' &&
+        Array.isArray(data.top_tags) &&
+        Array.isArray(data.most_viewed)
+      );
+    }
+
+    private setState(newState: Partial<StatsState>) {
+      this.state = { ...this.state, ...newState };
+      console.log('State updated:', this.state);
+      // TODO: Update DOM based on state
+    }
+
+    public async refreshStats() {
+      console.log('Manual refresh triggered');
+      await this.fetchStats();
+    }
+  }
+
+  // Initialize when DOM is ready
+  let statsController: StatsController;
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      statsController = new StatsController();
+    });
+  } else {
+    statsController = new StatsController();
+  }
+
+  // Make refreshStats available globally for testing
+  (window as any).refreshStats = () => {
+    if (statsController) {
+      return statsController.refreshStats();
+    }
+  };
+</script>
+
 <style>
   /* Stats Container */
   #stats-container {
