@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/jchen/go-sql-practice/internal/frontend"
 	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -30,7 +32,16 @@ func (s *spaFS) Open(name string) (fs.File, error) {
 }
 
 func registerStatic(e *core.ServeEvent) {
-	e.Router.GET("/*", func(c echo.Context) error {
-		return c.String(http.StatusNotImplemented, "Static serving not implemented")
-	})
+	frontendFS, err := frontend.GetFrontendFS()
+	if err != nil {
+		e.App.Logger().Error("Failed to get frontend filesystem", "error", err)
+		return
+	}
+
+	spaFilesystem := &spaFS{fs: frontendFS}
+	e.Router.Use(middleware.StaticWithConfig(middleware.StaticConfig{
+		Root:       "/",
+		Filesystem: http.FS(spaFilesystem),
+		Browse:     false,
+	}))
 }

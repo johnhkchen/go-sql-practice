@@ -1,4 +1,4 @@
-package main
+package frontend
 
 import (
 	"embed"
@@ -6,10 +6,10 @@ import (
 	"io/fs"
 )
 
-//go:embed frontend/dist/*
+//go:embed ../../frontend/dist/*
 var frontendFiles embed.FS
 
-func getFrontendFS() (fs.FS, error) {
+func GetFrontendFS() (fs.FS, error) {
 	subFS, err := fs.Sub(frontendFiles, "frontend/dist")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create frontend sub-filesystem: %w", err)
@@ -17,7 +17,7 @@ func getFrontendFS() (fs.FS, error) {
 	return subFS, nil
 }
 
-func frontendExists() bool {
-	_, err := getFrontendFS()
+func FrontendExists() bool {
+	_, err := GetFrontendFS()
 	return err == nil
 }
