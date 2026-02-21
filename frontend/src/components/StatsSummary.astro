@@ -72,6 +72,17 @@ export interface StatsState {
 </div>
 
 <script>
+  // API URL resolution helper
+  function getApiBase(): string {
+    if (typeof import.meta !== 'undefined' && import.meta.env?.PUBLIC_API_URL) {
+      return import.meta.env.PUBLIC_API_URL;
+    }
+    if (typeof window !== 'undefined' && (window as any).PUBLIC_API_URL) {
+      return (window as any).PUBLIC_API_URL;
+    }
+    return '';
+  }
+
   // TypeScript interfaces for client-side
   interface StatsData {
     total_links: number;
@@ -138,7 +149,7 @@ export interface StatsState {
       try {
         this.setState({ loading: true, error: null });
 
-        const response = await fetch('http://127.0.0.1:8094/api/stats', {
+        const response = await fetch(`${getApiBase()}/api/stats`, {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
