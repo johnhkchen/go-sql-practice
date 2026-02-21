@@ -4,6 +4,7 @@ FRONTEND_DIR := frontend
 DIST_DIR := $(FRONTEND_DIR)/dist
 SERVER_PORT := 127.0.0.1:8090
 
+.DEFAULT_GOAL := help
 .PHONY: build frontend backend clean dev test help validate-build
 
 build: frontend backend
@@ -29,3 +30,14 @@ dev:
 
 test:
 	flox activate -- go test ./...
+
+help:
+	@echo "Available targets:"
+	@echo "  build       - Build frontend and backend (full pipeline)"
+	@echo "  frontend    - Install deps and build Astro frontend"
+	@echo "  backend     - Build Go binary (requires frontend)"
+	@echo "  clean       - Remove all build artifacts"
+	@echo "  dev         - Start development server"
+	@echo "  test        - Run Go tests"
+	@echo "  validate    - Validate build artifacts"
+	@echo "  help        - Show this help message"
