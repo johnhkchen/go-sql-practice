@@ -1,0 +1,263 @@
+---
+// Disable prerendering for SSR
+export const prerender = false;
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// Get presentation ID from URL
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect('/404');
+}
+
+// API configuration
+const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
+const FETCH_TIMEOUT = 5000;
+
+let presentation = null;
+let error = null;
+
+try {
+  // Fetch presentation data with timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+  const response = await fetch(`${API_BASE}/api/collections/presentations/records/${id}`, {
+    signal: controller.signal,
+    headers: {
+      'Accept': 'application/json'
+    }
+  });
+
+  clearTimeout(timeoutId);
+
+  if (response.ok) {
+    presentation = await response.json();
+  } else if (response.status === 404) {
+    error = 'notfound';
+  } else {
+    error = 'server';
+  }
+} catch (err) {
+  if (err.name === 'AbortError') {
+    error = 'timeout';
+  } else {
+    error = 'network';
+  }
+}
+
+// Determine view state
+const isLive = presentation && presentation.active_session !== null;
+const isWaiting = presentation && presentation.active_session === null;
+
+// Error messages
+const errorMessages = {
+  notfound: {
+    title: 'Presentation Not Found',
+    message: 'This presentation does not exist or has been removed.'
+  },
+  network: {
+    title: 'Connection Error',
+    message: 'Unable to connect to the server. Please check your connection and try again.'
+  },
+  server: {
+    title: 'Server Error',
+    message: 'Something went wrong on our end. Please try again later.'
+  },
+  timeout: {
+    title: 'Request Timeout',
+    message: 'The request took too long. Please try again.'
+  }
+};
+
+const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading...');
+---
+
+<BaseLayout title={pageTitle}>
+  {error && (
+    <div class="error-container">
+      <h1 class="error-title">{errorMessages[error].title}</h1>
+      <p class="error-message">{errorMessages[error].message}</p>
+      <a href="/" class="back-link">← Back to Home</a>
+    </div>
+  )}
+
+  {isLive && (
+    <div class="live-container">
+      <h1 class="live-title">{presentation.name}</h1>
+      <p class="live-message">This presentation is currently live!</p>
+      <div class="live-indicator">
+        <span class="live-dot"></span>
+        <span>LIVE</span>
+      </div>
+    </div>
+  )}
+
+  {isWaiting && (
+    <div class="waiting-container">
+      <h1 class="waiting-title">{presentation.name}</h1>
+      <p class="waiting-message">Waiting for presenter to start...</p>
+      <div class="waiting-indicator animate-pulse"></div>
+    </div>
+  )}
+</BaseLayout>
+
+<style>
+  /* Import animations */
+  @import '../../styles/animations.css';
+
+  /* Common container styles */
+  .error-container,
+  .live-container,
+  .waiting-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 50vh;
+    text-align: center;
+    padding: var(--space-lg);
+  }
+
+  /* Waiting room styles */
+  .waiting-title {
+    font-size: 2rem;
+    margin-bottom: var(--space-md);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .waiting-message {
+    font-size: 1.125rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    margin-bottom: var(--space-lg);
+  }
+
+  .waiting-indicator {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--color-primary), var(--color-border));
+    opacity: 0.2;
+  }
+
+  /* Error styles */
+  .error-title {
+    font-size: 2rem;
+    margin-bottom: var(--space-md);
+    color: var(--color-primary);
+  }
+
+  .error-message {
+    font-size: 1.125rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    margin-bottom: var(--space-lg);
+    max-width: 500px;
+  }
+
+  .back-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+
+  .back-link:hover {
+    background-color: var(--color-footer);
+    text-decoration: none;
+  }
+
+  /* Live view styles */
+  .live-title {
+    font-size: 2rem;
+    margin-bottom: var(--space-md);
+    color: var(--color-primary);
+  }
+
+  .live-message {
+    font-size: 1.125rem;
+    color: var(--color-text);
+    margin-bottom: var(--space-lg);
+  }
+
+  .live-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-weight: 600;
+    color: #dc2626;
+  }
+
+  .live-dot {
+    width: 12px;
+    height: 12px;
+    background-color: #dc2626;
+    border-radius: 50%;
+    animation: pulse 1s infinite;
+  }
+
+  /* Mobile responsive */
+  @media (max-width: 767px) {
+    .waiting-title,
+    .error-title,
+    .live-title {
+      font-size: 1.5rem;
+    }
+
+    .waiting-message,
+    .error-message,
+    .live-message {
+      font-size: 1rem;
+    }
+
+    .waiting-indicator {
+      width: 50px;
+      height: 50px;
+    }
+  }
+
+  /* Accessibility: respect reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .waiting-indicator {
+      opacity: 0.4;
+    }
+  }
+</style>
+
+<script>
+  // Progressive enhancement: add live status checking
+  if (typeof window !== 'undefined') {
+    const presentationId = window.location.pathname.split('/')[2];
+    const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
+
+    // Only add enhancement if we're in the waiting state
+    if (document.querySelector('.waiting-container')) {
+      const checkInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`${API_BASE}/api/collections/presentations/records/${presentationId}`);
+          if (response.ok) {
+            const presentation = await response.json();
+            // If session becomes active, reload the page to show live view
+            if (presentation.active_session !== null) {
+              window.location.reload();
+            }
+          }
+        } catch (err) {
+          // Silently fail - the page still works without this enhancement
+          console.log('Status check failed:', err);
+        }
+      }, 5000); // Check every 5 seconds
+
+      // Clean up on page unload
+      window.addEventListener('beforeunload', () => {
+        clearInterval(checkInterval);
+      });
+    }
+  }
+</script>
