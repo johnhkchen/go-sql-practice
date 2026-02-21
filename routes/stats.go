@@ -1,12 +1,17 @@
 package routes
 
 import (
+	"net/http"
+
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 )
 
 // SQL query constants
 const (
+	// statsTopN defines the number of top items returned by stats queries
+	statsTopN = 5
+
 	sqlTotalLinks = "SELECT COUNT(*) as total FROM links"
 	sqlTotalTags  = "SELECT COUNT(*) as total FROM tags"
 	sqlTotalViews = "SELECT COALESCE(SUM(view_count), 0) as total FROM links"
@@ -73,31 +78,36 @@ func handleGetStats(e *core.RequestEvent, app core.App) error {
 	// Get total links
 	totalLinks, err := getTotalLinks(db)
 	if err != nil {
-		return e.JSON(500, map[string]string{"error": "Failed to get total links"})
+		app.Logger().Error("getTotalLinks failed", "error", err)
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get total links"})
 	}
 
 	// Get total tags
 	totalTags, err := getTotalTags(db)
 	if err != nil {
-		return e.JSON(500, map[string]string{"error": "Failed to get total tags"})
+		app.Logger().Error("getTotalTags failed", "error", err)
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get total tags"})
 	}
 
 	// Get total views
 	totalViews, err := getTotalViews(db)
 	if err != nil {
-		return e.JSON(500, map[string]string{"error": "Failed to get total views"})
+		app.Logger().Error("getTotalViews failed", "error", err)
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get total views"})
 	}
 
 	// Get most viewed links
 	mostViewed, err := getMostViewed(db)
 	if err != nil {
-		return e.JSON(500, map[string]string{"error": "Failed to get most viewed links"})
+		app.Logger().Error("getMostViewed failed", "error", err)
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get most viewed links"})
 	}
 
 	// Get top tags
 	topTags, err := getTopTags(db)
 	if err != nil {
-		return e.JSON(500, map[string]string{"error": "Failed to get top tags"})
+		app.Logger().Error("getTopTags failed", "error", err)
+		return e.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to get top tags"})
 	}
 
 	response := StatsResponse{
@@ -108,7 +118,7 @@ func handleGetStats(e *core.RequestEvent, app core.App) error {
 		MostViewed: mostViewed,
 	}
 
-	return e.JSON(200, response)
+	return e.JSON(http.StatusOK, response)
 }
 
 // getTotalLinks returns the total number of links
