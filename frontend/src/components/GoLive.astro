@@ -1,0 +1,184 @@
+---
+interface Props {
+  presentationId: string;
+}
+
+const { presentationId } = Astro.props;
+---
+
+<div class="go-live-container">
+  <button type="button" class="go-live-btn" data-presentation-id={presentationId}>
+    Go Live
+  </button>
+  <div class="go-live-status" aria-live="polite" role="status"></div>
+</div>
+
+<script>
+  class GoLiveController {
+    private button: HTMLButtonElement;
+    private status: HTMLElement;
+    private presentationId: string;
+    private isLoading = false;
+
+    constructor(container: HTMLElement) {
+      this.button = container.querySelector('.go-live-btn') as HTMLButtonElement;
+      this.status = container.querySelector('.go-live-status') as HTMLElement;
+      this.presentationId = this.button.dataset.presentationId!;
+
+      this.button.addEventListener('click', () => this.handleGoLive());
+    }
+
+    private async handleGoLive() {
+      if (this.isLoading) return;
+
+      this.setLoading(true);
+      this.clearStatus();
+
+      try {
+        const response = await fetch(`/api/presentations/${this.presentationId}/live`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        // Success - redirect to presenter control view
+        const controlUrl = `/present/${this.presentationId}`;
+        this.showSuccess('Starting presentation...');
+
+        // Small delay to show success message before redirect
+        setTimeout(() => {
+          window.location.href = controlUrl;
+        }, 500);
+
+      } catch (error) {
+        this.showError(error instanceof Error ? error.message : 'Failed to start presentation');
+        this.setLoading(false);
+      }
+    }
+
+    private setLoading(loading: boolean) {
+      this.isLoading = loading;
+      this.button.disabled = loading;
+      this.button.textContent = loading ? 'Starting...' : 'Go Live';
+      this.button.classList.toggle('loading', loading);
+    }
+
+    private showSuccess(message: string) {
+      this.status.textContent = message;
+      this.status.className = 'go-live-status success';
+    }
+
+    private showError(message: string) {
+      this.status.textContent = message;
+      this.status.className = 'go-live-status error';
+    }
+
+    private clearStatus() {
+      this.status.textContent = '';
+      this.status.className = 'go-live-status';
+    }
+  }
+
+  // Initialize all go-live components on the page
+  document.addEventListener('DOMContentLoaded', () => {
+    const containers = document.querySelectorAll('.go-live-container');
+    containers.forEach(container => {
+      new GoLiveController(container as HTMLElement);
+    });
+  });
+</script>
+
+<style>
+  .go-live-container {
+    display: inline-block;
+    position: relative;
+  }
+
+  .go-live-btn {
+    background: linear-gradient(135deg, var(--color-primary), #10b981);
+    color: white;
+    border: none;
+    padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--border-radius);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .go-live-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  .go-live-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .go-live-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .go-live-btn.loading {
+    background: #6b7280;
+    background-size: 200% 100%;
+    animation: loading-shimmer 1.5s infinite ease-in-out;
+  }
+
+  @keyframes loading-shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .go-live-status {
+    margin-top: var(--space-xs);
+    font-size: 0.8rem;
+    min-height: 1.2em;
+    display: block;
+  }
+
+  .go-live-status.success {
+    color: var(--color-success, #10b981);
+  }
+
+  .go-live-status.error {
+    color: var(--color-error, #ef4444);
+  }
+
+  .go-live-status:empty {
+    display: none;
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 767px) {
+    .go-live-btn {
+      padding: var(--space-sm) var(--space-md);
+      font-size: 0.85rem;
+      width: 100%;
+      margin-bottom: var(--space-xs);
+    }
+
+    .go-live-container {
+      display: block;
+      width: 100%;
+    }
+  }
+</style>
