@@ -2,7 +2,7 @@
 
 ## Project
 
-go-sql-practice (unknown type) — TODO: add a one-line project description here.
+go-sql-practice — Link bookmarks app with Go/PocketBase backend and Astro frontend.
 
 
 
