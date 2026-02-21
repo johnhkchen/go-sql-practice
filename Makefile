@@ -20,6 +20,8 @@ clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf $(DIST_DIR)
 	rm -f $(BINARY_NAME)
+	rm -rf pb_data
+	@echo "Clean complete"
 
 dev:
 	@echo "Starting development server..."
