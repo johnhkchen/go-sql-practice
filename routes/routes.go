@@ -10,6 +10,7 @@ func Register(app core.App) {
 		// Register individual routes
 		registerHealth(e)
 		registerSyncSessions(e)
+		registerPresentations(e)
 		registerStats(e)
 		registerLinksSearch(e)
 		registerLinksSearchSimple(e)
