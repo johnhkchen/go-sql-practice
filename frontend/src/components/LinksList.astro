@@ -19,58 +19,71 @@ const {
   className = ''
 } = Astro.props;
 
-// Determine display context
-const hasLinks = links.length > 0;
-const isEmpty = links.length === 0;
+// Determine display states
+const hasLinks = links && links.length > 0;
+const isEmpty = !hasLinks;
 
-// Format results header text
-function getResultsText(count: number, query: string, isSearch: boolean): string {
-  if (isSearch && query) {
-    return count === 0
-      ? `No results found for "${query}"`
-      : `${count} ${count === 1 ? 'result' : 'results'} for "${query}"`;
+// Generate context messages for different scenarios
+function getResultsHeader(): { title: string; subtitle: string } {
+  if (isEmpty && isSearchResult) {
+    return {
+      title: `No results for "${searchQuery}"`,
+      subtitle: 'Try adjusting your search terms or browse all links below.'
+    };
   }
-  return count === 0
-    ? 'No links available'
-    : `${count} ${count === 1 ? 'link' : 'links'} available`;
+
+  if (isEmpty && !isSearchResult) {
+    return {
+      title: 'No links available',
+      subtitle: 'Links will appear here as they are added to the system.'
+    };
+  }
+
+  if (isSearchResult) {
+    return {
+      title: `Search Results for "${searchQuery}"`,
+      subtitle: `Found ${totalCount} ${totalCount === 1 ? 'link' : 'links'} matching your query`
+    };
+  }
+
+  return {
+    title: 'All Links',
+    subtitle: `${totalCount} ${totalCount === 1 ? 'link' : 'links'} available`
+  };
 }
 
-const resultsText = getResultsText(totalCount, searchQuery, isSearchResult);
+const { title, subtitle } = getResultsHeader();
 ---
 
-<div class={`links-list-container ${className}`}>
-  <!-- Results context header -->
-  {(hasLinks || isEmpty) && (
-    <header class="links-list-header">
-      <p class="links-list-count" aria-live="polite">
-        {resultsText}
-      </p>
-    </header>
-  )}
+<div class={`links-list ${className}`}>
+  <!-- Results header with context -->
+  <header class="links-list-header">
+    <h1 class="links-list-title">{title}</h1>
+    <p class="links-list-subtitle">{subtitle}</p>
+  </header>
 
   <!-- Empty state -->
   {isEmpty && (
-    <div class="empty-state" role="status" aria-label="No links found">
+    <div class="empty-state">
       <div class="empty-icon">
-        {isSearchResult && searchQuery ? '🔍' : '📚'}
+        {isSearchResult ? '🔍' : '📋'}
       </div>
       <div class="empty-content">
         <h2 class="empty-title">
-          {isSearchResult && searchQuery
-            ? `No results for "${searchQuery}"`
-            : 'No links available'}
+          {isSearchResult ? 'No matching links found' : 'No links yet'}
         </h2>
         <p class="empty-message">
-          {isSearchResult && searchQuery
-            ? 'Try adjusting your search terms or browse all links below.'
-            : 'Links will appear here once they are added to the collection.'}
+          {isSearchResult
+            ? `Your search for "${searchQuery}" didn't match any links. Try different keywords or check your spelling.`
+            : 'Links will appear here once they are added to your collection.'
+          }
         </p>
         {isSearchResult && (
           <div class="empty-actions">
             <button
+              onclick="document.querySelector('input[name=\\\"q\\\"]')?.focus(); document.querySelector('input[name=\\\"q\\\"]').value = ''"
+              class="clear-search-btn"
               type="button"
-              class="clear-search-button"
-              onclick="window.location.href = '/'"
             >
               Clear Search
             </button>
@@ -82,34 +95,55 @@ const resultsText = getResultsText(totalCount, searchQuery, isSearchResult);
 
   <!-- Links grid -->
   {hasLinks && (
-    <div class="links-grid" role="main" aria-label="Links list">
-      {links.map((link) => (
-        <LinkCard link={link} />
+    <div class="links-grid" role="main" aria-label={`${totalCount} links displayed`}>
+      {links.map((link, index) => (
+        <LinkCard
+          link={link}
+          showIndex={isSearchResult ? undefined : index + 1}
+          key={link.id}
+        />
       ))}
     </div>
+  )}
+
+  <!-- Results footer (for pagination info in future) -->
+  {hasLinks && totalCount > links.length && (
+    <footer class="links-list-footer">
+      <p class="pagination-hint">
+        Showing {links.length} of {totalCount} links
+      </p>
+    </footer>
   )}
 </div>
 
 <style>
   /* Main container */
-  .links-list-container {
+  .links-list {
     width: 100%;
   }
 
-  /* Results header */
+  /* Header section */
   .links-list-header {
-    margin-bottom: var(--space-lg);
-    padding-bottom: var(--space-md);
+    text-align: center;
+    margin-bottom: var(--space-xl);
+    padding-bottom: var(--space-lg);
     border-bottom: 1px solid var(--color-border);
   }
 
-  .links-list-count {
-    margin: 0;
-    font-size: 1rem;
+  .links-list-title {
+    font-size: 2.25rem;
+    margin-bottom: var(--space-sm);
+    color: var(--color-primary);
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .links-list-subtitle {
+    font-size: 1.125rem;
     color: var(--color-text);
     opacity: 0.8;
-    font-weight: 500;
-    text-align: center;
+    margin: 0;
+    line-height: 1.4;
   }
 
   /* Empty state styles */
@@ -154,7 +188,7 @@ const resultsText = getResultsText(totalCount, searchQuery, isSearchResult);
     justify-content: center;
   }
 
-  .clear-search-button {
+  .clear-search-btn {
     color: var(--color-primary);
     background-color: transparent;
     border: 1px solid var(--color-border);
@@ -167,18 +201,17 @@ const resultsText = getResultsText(totalCount, searchQuery, isSearchResult);
     transition: all 0.2s ease;
   }
 
-  .clear-search-button:hover {
+  .clear-search-btn:hover {
     background-color: var(--color-footer);
     border-color: var(--color-primary);
-    text-decoration: none;
   }
 
-  .clear-search-button:focus {
+  .clear-search-btn:focus {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
   }
 
-  .clear-search-button:active {
+  .clear-search-btn:active {
     transform: translateY(1px);
   }
 
@@ -190,23 +223,50 @@ const resultsText = getResultsText(totalCount, searchQuery, isSearchResult);
     margin-bottom: var(--space-xl);
   }
 
+  /* Footer section */
+  .links-list-footer {
+    text-align: center;
+    padding-top: var(--space-lg);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .pagination-hint {
+    color: var(--color-text);
+    opacity: 0.7;
+    font-size: 0.9rem;
+    margin: 0;
+  }
+
   /* Responsive design */
   @media (max-width: 767px) {
+    .links-list-header {
+      margin-bottom: var(--space-lg);
+      padding-bottom: var(--space-md);
+    }
+
+    .links-list-title {
+      font-size: 1.75rem;
+    }
+
+    .links-list-subtitle {
+      font-size: 1rem;
+    }
+
     .empty-state {
-      padding: var(--space-lg);
       min-height: 30vh;
+      padding: var(--space-lg);
     }
 
     .empty-icon {
-      font-size: 2.5rem;
+      font-size: 3rem;
     }
 
     .empty-title {
-      font-size: 1.25rem;
+      font-size: 1.5rem;
     }
 
     .empty-message {
-      font-size: 0.9rem;
+      font-size: 1rem;
     }
 
     .links-grid {
@@ -214,13 +274,9 @@ const resultsText = getResultsText(totalCount, searchQuery, isSearchResult);
       gap: var(--space-md);
     }
 
-    .links-list-count {
-      font-size: 0.9rem;
-    }
-
-    .clear-search-button {
-      font-size: 0.85rem;
-      padding: var(--space-xs) var(--space-md);
+    .clear-search-btn {
+      width: 100%;
+      max-width: 200px;
     }
   }
 
@@ -232,27 +288,23 @@ const resultsText = getResultsText(totalCount, searchQuery, isSearchResult);
 
   /* High contrast mode support */
   @media (prefers-contrast: high) {
-    .empty-state {
-      border: 2px solid var(--color-border);
-      border-radius: 8px;
-    }
-
-    .clear-search-button {
+    .links-list-header,
+    .links-list-footer {
       border-width: 2px;
     }
 
-    .links-list-header {
-      border-bottom-width: 2px;
+    .clear-search-btn {
+      border-width: 2px;
     }
   }
 
   /* Reduced motion support */
   @media (prefers-reduced-motion: reduce) {
-    .clear-search-button {
+    .clear-search-btn {
       transition: none;
     }
 
-    .clear-search-button:active {
+    .clear-search-btn:active {
       transform: none;
     }
   }

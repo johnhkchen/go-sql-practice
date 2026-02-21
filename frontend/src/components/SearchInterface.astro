@@ -1,0 +1,429 @@
+---
+// Import LinkItem interface for prop typing
+import { type LinkItem } from './LinkCard.astro';
+
+// Component interface
+interface Props {
+  initialQuery?: string;
+  initialResults?: LinkItem[];
+  initialCount?: number;
+  className?: string;
+}
+
+const {
+  initialQuery = '',
+  initialResults = [],
+  initialCount = 0,
+  className = ''
+} = Astro.props;
+
+// Format query for display
+const displayQuery = initialQuery ? decodeURIComponent(initialQuery) : '';
+---
+
+<div class={`search-interface ${className}`}>
+  <!-- Search form with accessibility -->
+  <form
+    class="search-form"
+    method="GET"
+    action="/"
+    role="search"
+    aria-label="Search links"
+  >
+    <div class="search-input-container">
+      <label for="search-input" class="search-label">
+        Search Links
+      </label>
+      <div class="search-input-wrapper">
+        <input
+          id="search-input"
+          name="q"
+          type="search"
+          class="search-input"
+          placeholder="Search by title, description, or tag..."
+          value={displayQuery}
+          autocomplete="off"
+          aria-describedby="search-help"
+        />
+        <button
+          type="submit"
+          class="search-button"
+          aria-label="Search"
+          title="Search links"
+        >
+          <span class="search-icon" aria-hidden="true">🔍</span>
+        </button>
+        {initialQuery && (
+          <button
+            type="button"
+            class="clear-button"
+            aria-label="Clear search"
+            title="Clear search"
+            onclick="window.location.href = '/'"
+          >
+            <span class="clear-icon" aria-hidden="true">✕</span>
+          </button>
+        )}
+      </div>
+      <div id="search-help" class="search-help">
+        Search across titles, descriptions, and tags to find relevant links
+      </div>
+    </div>
+  </form>
+
+  <!-- Loading indicator (hidden initially) -->
+  <div class="loading-indicator" aria-live="polite" aria-hidden="true">
+    <div class="loading-spinner" aria-hidden="true"></div>
+    <span class="loading-text">Searching...</span>
+  </div>
+
+  <!-- Error display area (hidden initially) -->
+  <div class="error-display" role="alert" aria-live="assertive" aria-hidden="true">
+    <div class="error-content">
+      <div class="error-icon" aria-hidden="true">⚠️</div>
+      <div class="error-message">
+        <strong class="error-title">Search Failed</strong>
+        <p class="error-text">Unable to complete search. Please try again.</p>
+      </div>
+      <button type="button" class="error-retry" aria-label="Retry search">
+        Retry
+      </button>
+    </div>
+  </div>
+
+  <!-- Results count display -->
+  <div class="results-meta" aria-live="polite">
+    {initialQuery && (
+      <div class="results-summary">
+        <span class="results-count">
+          {initialCount === 0
+            ? 'No results found'
+            : `${initialCount} ${initialCount === 1 ? 'result' : 'results'} found`}
+        </span>
+        {initialQuery && (
+          <span class="results-query">
+            for "<strong>{displayQuery}</strong>"
+          </span>
+        )}
+      </div>
+    )}
+  </div>
+</div>
+
+<style>
+  /* Main container */
+  .search-interface {
+    width: 100%;
+    margin-bottom: var(--space-xl);
+  }
+
+  /* Search form */
+  .search-form {
+    width: 100%;
+    margin-bottom: var(--space-md);
+  }
+
+  .search-input-container {
+    width: 100%;
+  }
+
+  .search-label {
+    display: block;
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: var(--color-primary);
+    margin-bottom: var(--space-sm);
+  }
+
+  .search-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    border-radius: 8px;
+    border: 2px solid var(--color-border);
+    overflow: hidden;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .search-input-wrapper:focus-within {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(0, 116, 204, 0.1);
+  }
+
+  .search-input {
+    flex: 1;
+    padding: var(--space-md);
+    border: none;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-size: 1rem;
+    font-family: var(--font-body);
+    outline: none;
+  }
+
+  .search-input::placeholder {
+    color: var(--color-text);
+    opacity: 0.6;
+  }
+
+  .search-button,
+  .clear-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-md);
+    border: none;
+    background-color: var(--color-primary);
+    color: var(--color-bg);
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.2s ease;
+    min-width: 48px;
+  }
+
+  .search-button:hover {
+    background-color: #005a9d;
+  }
+
+  .search-button:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .clear-button {
+    background-color: var(--color-text);
+    border-left: 1px solid var(--color-border);
+  }
+
+  .clear-button:hover {
+    background-color: #666;
+  }
+
+  .search-icon,
+  .clear-icon {
+    line-height: 1;
+  }
+
+  .search-help {
+    margin-top: var(--space-xs);
+    font-size: 0.875rem;
+    color: var(--color-text);
+    opacity: 0.7;
+    line-height: 1.4;
+  }
+
+  /* Loading indicator */
+  .loading-indicator {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    padding: var(--space-lg);
+    background-color: var(--color-footer);
+    border-radius: 8px;
+    margin-bottom: var(--space-md);
+  }
+
+  .loading-indicator[aria-hidden="false"] {
+    display: flex;
+  }
+
+  .loading-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-border);
+    border-top: 2px solid var(--color-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  .loading-text {
+    font-size: 0.9rem;
+    color: var(--color-text);
+    font-weight: 500;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  /* Error display */
+  .error-display {
+    display: none;
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: var(--space-lg);
+    margin-bottom: var(--space-md);
+  }
+
+  .error-display[aria-hidden="false"] {
+    display: block;
+  }
+
+  .error-content {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-md);
+  }
+
+  .error-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .error-message {
+    flex: 1;
+  }
+
+  .error-title {
+    display: block;
+    font-weight: 600;
+    color: #dc2626;
+    margin-bottom: var(--space-xs);
+  }
+
+  .error-text {
+    margin: 0;
+    color: #374151;
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+
+  .error-retry {
+    background-color: #dc2626;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: var(--space-xs) var(--space-sm);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .error-retry:hover {
+    background-color: #b91c1c;
+  }
+
+  .error-retry:focus {
+    outline: 2px solid #dc2626;
+    outline-offset: 2px;
+  }
+
+  /* Results metadata */
+  .results-meta {
+    margin-bottom: var(--space-lg);
+  }
+
+  .results-summary {
+    text-align: center;
+    padding: var(--space-sm);
+    background-color: var(--color-footer);
+    border-radius: 4px;
+    font-size: 0.9rem;
+    color: var(--color-text);
+  }
+
+  .results-count {
+    font-weight: 500;
+  }
+
+  .results-query {
+    margin-left: var(--space-xs);
+  }
+
+  /* Responsive design */
+  @media (max-width: 767px) {
+    .search-label {
+      font-size: 1rem;
+    }
+
+    .search-input {
+      font-size: 16px; /* Prevent iOS zoom */
+      padding: var(--space-sm);
+    }
+
+    .search-button,
+    .clear-button {
+      padding: var(--space-sm);
+      min-width: 44px;
+    }
+
+    .search-help {
+      font-size: 0.8rem;
+    }
+
+    .error-content {
+      flex-direction: column;
+      gap: var(--space-sm);
+    }
+
+    .error-retry {
+      align-self: flex-start;
+    }
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .search-input-wrapper {
+      border-width: 3px;
+    }
+
+    .search-button,
+    .clear-button {
+      border: 2px solid var(--color-text);
+    }
+
+    .loading-indicator,
+    .error-display,
+    .results-summary {
+      border: 2px solid var(--color-border);
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .search-input-wrapper {
+      transition: none;
+    }
+
+    .search-button,
+    .clear-button,
+    .error-retry {
+      transition: none;
+    }
+
+    .loading-spinner {
+      animation: none;
+      border-top-color: var(--color-border);
+    }
+  }
+
+  /* Focus management for keyboard navigation */
+  .search-input:focus {
+    outline: none;
+  }
+
+  /* Ensure proper spacing in search interface */
+  .search-interface + * {
+    margin-top: var(--space-lg);
+  }
+
+  /* State classes for JavaScript interaction (prepared for Step 4) */
+  .search-interface[data-loading="true"] .loading-indicator {
+    display: flex;
+  }
+
+  .search-interface[data-error="true"] .error-display {
+    display: block;
+  }
+
+  .search-interface[data-searching="true"] .search-input {
+    opacity: 0.7;
+  }
+</style>
