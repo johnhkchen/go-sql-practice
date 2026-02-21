@@ -1,0 +1,348 @@
+---
+// Disable prerendering for SSR
+export const prerender = false;
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+// Get link ID from URL
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect('/404');
+}
+
+// API configuration
+const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
+const FETCH_TIMEOUT = 5000;
+
+// Type definitions
+interface LinkItem {
+  id: string;
+  url: string;
+  title: string;
+  description: string;
+  view_count: number;
+  tags: string[];
+  created: string;
+  updated: string;
+}
+
+let link: LinkItem | null = null;
+let error: string | null = null;
+
+try {
+  // Fetch link data with timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+  const response = await fetch(`${API_BASE}/api/collections/links/records/${id}`, {
+    signal: controller.signal,
+    headers: {
+      'Accept': 'application/json'
+    }
+  });
+
+  clearTimeout(timeoutId);
+
+  if (response.ok) {
+    link = await response.json();
+  } else if (response.status === 404) {
+    error = 'notfound';
+  } else {
+    error = 'server';
+  }
+} catch (err) {
+  if (err.name === 'AbortError') {
+    error = 'timeout';
+  } else {
+    error = 'network';
+  }
+}
+
+// Error messages
+const errorMessages = {
+  notfound: {
+    title: 'Link Not Found',
+    message: 'This link does not exist or has been removed.'
+  },
+  network: {
+    title: 'Connection Error',
+    message: 'Unable to connect to the server. Please check your connection and try again.'
+  },
+  server: {
+    title: 'Server Error',
+    message: 'Something went wrong on our end. Please try again later.'
+  },
+  timeout: {
+    title: 'Request Timeout',
+    message: 'The request took too long. Please try again.'
+  }
+};
+
+const pageTitle = link ? link.title : (error ? 'Error' : 'Loading...');
+---
+
+<BaseLayout title={pageTitle}>
+  {error && (
+    <div class="error-container">
+      <h1 class="error-title">{errorMessages[error].title}</h1>
+      <p class="error-message">{errorMessages[error].message}</p>
+      <a href="/" class="back-link">← Back to Home</a>
+    </div>
+  )}
+
+  {link && (
+    <div class="link-container">
+      <h1 class="link-title">{link.title}</h1>
+      <div class="link-url">
+        <a href={link.url} target="_blank" rel="noopener noreferrer" class="external-link">
+          {link.url}
+        </a>
+      </div>
+      {link.description && (
+        <p class="link-description">{link.description}</p>
+      )}
+      <div class="link-meta">
+        <div class="view-count-container">
+          <span class="view-count">{link.view_count} views</span>
+        </div>
+        {link.tags && link.tags.length > 0 && (
+          <div class="tags-container">
+            <span class="tags-label">Tags:</span>
+            <div class="tags-list">
+              {link.tags.map(tag => (
+                <a href={`/search?tag=${tag}`} class="tag-pill">
+                  {tag}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
+</BaseLayout>
+
+<style>
+  /* Import animations */
+  @import '../../styles/animations.css';
+
+  /* Common container styles */
+  .error-container,
+  .link-container {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-lg);
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .error-container {
+    align-items: center;
+    justify-content: center;
+    min-height: 50vh;
+    text-align: center;
+  }
+
+  /* Error styles */
+  .error-title {
+    font-size: 2rem;
+    margin-bottom: var(--space-md);
+    color: var(--color-primary);
+  }
+
+  .error-message {
+    font-size: 1.125rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    margin-bottom: var(--space-lg);
+    max-width: 500px;
+  }
+
+  .back-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+
+  .back-link:hover {
+    background-color: var(--color-footer);
+    text-decoration: none;
+  }
+
+  /* Link detail styles */
+  .link-title {
+    font-size: 2rem;
+    margin-bottom: var(--space-md);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .link-url {
+    margin-bottom: var(--space-lg);
+  }
+
+  .external-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-size: 1.125rem;
+    word-break: break-all;
+    padding: var(--space-sm);
+    background-color: var(--color-footer);
+    border-radius: 4px;
+    display: inline-block;
+    transition: background-color 0.2s ease;
+  }
+
+  .external-link:hover {
+    background-color: var(--color-border);
+    text-decoration: underline;
+  }
+
+  .link-description {
+    font-size: 1.125rem;
+    color: var(--color-text);
+    line-height: 1.6;
+    margin-bottom: var(--space-lg);
+  }
+
+  .link-meta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .view-count-container {
+    display: flex;
+    align-items: center;
+  }
+
+  .view-count {
+    font-size: 0.875rem;
+    color: var(--color-text);
+    opacity: 0.7;
+    font-weight: 500;
+  }
+
+  .tags-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+
+  .tags-label {
+    font-size: 0.875rem;
+    color: var(--color-text);
+    opacity: 0.7;
+    font-weight: 500;
+  }
+
+  .tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+
+  .tag-pill {
+    background-color: var(--color-footer);
+    color: var(--color-text);
+    text-decoration: none;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: 999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid var(--color-border);
+    transition: background-color 0.2s ease;
+  }
+
+  .tag-pill:hover {
+    background-color: var(--color-border);
+    text-decoration: none;
+  }
+
+  /* Mobile responsive */
+  @media (max-width: 767px) {
+    .link-title,
+    .error-title {
+      font-size: 1.5rem;
+    }
+
+    .link-description,
+    .error-message {
+      font-size: 1rem;
+    }
+
+    .external-link {
+      font-size: 1rem;
+    }
+
+    .link-meta {
+      flex-direction: column;
+    }
+
+    .tags-container {
+      align-items: flex-start;
+    }
+  }
+
+  /* Large screen layout */
+  @media (min-width: 768px) {
+    .tags-container {
+      flex-direction: row;
+      align-items: center;
+    }
+
+    .tags-label {
+      min-width: 60px;
+    }
+  }
+</style>
+
+<script>
+  // Progressive enhancement: increment view count on page load
+  if (typeof window !== 'undefined') {
+    const linkId = window.location.pathname.split('/')[2];
+    const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
+
+    // Only increment view count if we successfully loaded a link (not on error pages)
+    if (document.querySelector('.link-container')) {
+      // Increment view count
+      fetch(`${API_BASE}/api/links/${linkId}/view`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+          return response.json();
+        }
+        throw new Error(`HTTP ${response.status}`);
+      })
+      .then(data => {
+        // Update view count display
+        const viewCountElement = document.querySelector('.view-count');
+        if (viewCountElement && data.view_count !== undefined) {
+          viewCountElement.textContent = `${data.view_count} views`;
+
+          // Add a subtle highlight animation to show the update
+          viewCountElement.style.transition = 'color 0.3s ease';
+          viewCountElement.style.color = 'var(--color-primary)';
+          setTimeout(() => {
+            viewCountElement.style.color = '';
+          }, 1500);
+        }
+      })
+      .catch(err => {
+        // Silently fail - the page still works without view counting
+        console.log('View count increment failed:', err);
+      });
+    }
+  }
+</script>

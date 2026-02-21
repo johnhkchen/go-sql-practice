@@ -1,0 +1,401 @@
+---
+// Disable prerendering for SSR
+export const prerender = false;
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import LinkCard from '../../components/LinkCard.astro';
+
+// Get tag slug from URL
+const { slug } = Astro.params;
+
+if (!slug) {
+  return Astro.redirect('/404');
+}
+
+// API configuration
+const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
+const FETCH_TIMEOUT = 5000;
+
+// Search API response interfaces
+interface LinkItem {
+  id: string;
+  title: string;
+  url: string;
+  description: string;
+  tags: string[];
+  created_at: string;
+  view_count: number;
+}
+
+interface SearchResponse {
+  links: LinkItem[];
+  page: number;
+  per_page: number;
+  total_count: number;
+  total_pages: number;
+}
+
+let searchResponse: SearchResponse | null = null;
+let error: string | null = null;
+
+try {
+  // Fetch tag data with timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+  const response = await fetch(`${API_BASE}/api/links/search?tag=${encodeURIComponent(slug)}&page=1&per_page=50`, {
+    signal: controller.signal,
+    headers: {
+      'Accept': 'application/json'
+    }
+  });
+
+  clearTimeout(timeoutId);
+
+  if (response.ok) {
+    searchResponse = await response.json();
+  } else if (response.status === 404) {
+    error = 'notfound';
+  } else {
+    error = 'server';
+  }
+} catch (err) {
+  if (err.name === 'AbortError') {
+    error = 'timeout';
+  } else {
+    error = 'network';
+  }
+}
+
+// Determine view state
+const hasLinks = searchResponse && searchResponse.links.length > 0;
+const isEmpty = searchResponse && searchResponse.links.length === 0;
+
+// Error messages
+const errorMessages = {
+  notfound: {
+    title: 'Tag Not Found',
+    message: 'This tag does not exist or has no associated links.'
+  },
+  network: {
+    title: 'Connection Error',
+    message: 'Unable to connect to the server. Please check your connection and try again.'
+  },
+  server: {
+    title: 'Server Error',
+    message: 'Something went wrong on our end. Please try again later.'
+  },
+  timeout: {
+    title: 'Request Timeout',
+    message: 'The request took too long. Please try again.'
+  }
+};
+
+// Format tag name for display
+const tagDisplayName = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+const pageTitle = error ? 'Error' : hasLinks ? `${tagDisplayName} Links` : isEmpty ? `No ${tagDisplayName} Links` : 'Loading...';
+---
+
+<BaseLayout title={pageTitle}>
+  <main class="tag-page-container">
+    {/* Error State */}
+    {error && (
+      <div class="error-state">
+        <div class="error-icon">⚠️</div>
+        <h1 class="error-title">{errorMessages[error].title}</h1>
+        <p class="error-message">{errorMessages[error].message}</p>
+        <div class="error-actions">
+          <a href="/" class="back-link">← Back to Home</a>
+          <button onclick="window.location.reload()" class="retry-button">Try Again</button>
+        </div>
+      </div>
+    )}
+
+    {/* Empty State */}
+    {isEmpty && (
+      <div class="empty-state">
+        <div class="empty-icon">🏷️</div>
+        <h1 class="empty-title">No Links for "{tagDisplayName}"</h1>
+        <p class="empty-message">
+          There are no links associated with this tag yet.
+        </p>
+        <div class="empty-actions">
+          <a href="/" class="back-link">← Browse All Links</a>
+        </div>
+      </div>
+    )}
+
+    {/* Success State */}
+    {hasLinks && (
+      <div class="success-state">
+        <header class="tag-header">
+          <h1 class="tag-title">
+            <span class="tag-icon">🏷️</span>
+            {tagDisplayName}
+          </h1>
+          <p class="tag-subtitle">
+            {searchResponse.total_count} {searchResponse.total_count === 1 ? 'link' : 'links'} tagged with "{tagDisplayName}"
+          </p>
+        </header>
+
+        <div class="links-grid">
+          {searchResponse.links.map((link) => (
+            <LinkCard link={link} />
+          ))}
+        </div>
+
+        {/* Pagination info (for future enhancement) */}
+        {searchResponse.total_pages > 1 && (
+          <div class="pagination-info">
+            <p>Showing page {searchResponse.page} of {searchResponse.total_pages}</p>
+          </div>
+        )}
+      </div>
+    )}
+  </main>
+</BaseLayout>
+
+<style>
+  /* Main container */
+  .tag-page-container {
+    width: 100%;
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: var(--space-lg);
+    min-height: 60vh;
+  }
+
+  /* Common state containers */
+  .error-state,
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 50vh;
+  }
+
+  /* Error state styles */
+  .error-icon,
+  .empty-icon {
+    font-size: 3rem;
+    margin-bottom: var(--space-lg);
+    opacity: 0.8;
+  }
+
+  .error-title,
+  .empty-title {
+    font-size: 2rem;
+    margin-bottom: var(--space-md);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .error-message,
+  .empty-message {
+    font-size: 1.125rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    margin-bottom: var(--space-xl);
+    max-width: 500px;
+    line-height: 1.6;
+  }
+
+  .error-actions,
+  .empty-actions {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .back-link,
+  .retry-button {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+    padding: var(--space-sm) var(--space-lg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background-color: transparent;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .back-link:hover,
+  .retry-button:hover {
+    background-color: var(--color-footer);
+    text-decoration: none;
+    border-color: var(--color-primary);
+  }
+
+  .retry-button:active {
+    transform: translateY(1px);
+  }
+
+  /* Success state styles */
+  .success-state {
+    width: 100%;
+  }
+
+  .tag-header {
+    text-align: center;
+    margin-bottom: var(--space-xl);
+    padding-bottom: var(--space-lg);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .tag-title {
+    font-size: 2.5rem;
+    margin-bottom: var(--space-md);
+    color: var(--color-primary);
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+  }
+
+  .tag-icon {
+    font-size: 2rem;
+  }
+
+  .tag-subtitle {
+    font-size: 1.125rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    margin: 0;
+  }
+
+  /* Links grid */
+  .links-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: var(--space-lg);
+    margin-bottom: var(--space-xl);
+  }
+
+  /* Pagination info */
+  .pagination-info {
+    text-align: center;
+    padding-top: var(--space-lg);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .pagination-info p {
+    color: var(--color-text);
+    opacity: 0.7;
+    font-size: 0.9rem;
+    margin: 0;
+  }
+
+  /* Responsive design */
+  @media (max-width: 767px) {
+    .tag-page-container {
+      padding: var(--space-md);
+    }
+
+    .error-title,
+    .empty-title {
+      font-size: 1.5rem;
+    }
+
+    .error-message,
+    .empty-message {
+      font-size: 1rem;
+    }
+
+    .tag-title {
+      font-size: 2rem;
+      flex-direction: column;
+      gap: var(--space-sm);
+    }
+
+    .tag-icon {
+      font-size: 1.5rem;
+    }
+
+    .tag-subtitle {
+      font-size: 1rem;
+    }
+
+    .links-grid {
+      grid-template-columns: 1fr;
+      gap: var(--space-md);
+    }
+
+    .error-actions,
+    .empty-actions {
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .back-link,
+    .retry-button {
+      width: 200px;
+      text-align: center;
+    }
+  }
+
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .links-grid {
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    }
+  }
+
+  /* Loading state (for progressive enhancement) */
+  .loading-skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+    border-radius: 8px;
+    height: 200px;
+    margin-bottom: var(--space-md);
+  }
+
+  @keyframes loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .error-state,
+    .empty-state,
+    .tag-header {
+      border: 2px solid var(--color-border);
+    }
+
+    .back-link,
+    .retry-button {
+      border-width: 2px;
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .loading-skeleton {
+      animation: none;
+      background: #f0f0f0;
+    }
+
+    .back-link,
+    .retry-button {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  // Progressive enhancement: Add search refinement (future enhancement)
+  console.log('Tag page loaded for:', document.title);
+
+  // Track page view for analytics (future enhancement)
+  if (typeof window !== 'undefined') {
+    const tagSlug = window.location.pathname.split('/')[2];
+    console.log('Viewing tag:', tagSlug);
+  }
+</script>

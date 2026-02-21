@@ -1,0 +1,267 @@
+---
+// Component interfaces
+export interface LinkItem {
+  id: string;
+  title: string;
+  url: string;
+  description: string;
+  tags: string[];
+  created_at: string;
+  view_count: number;
+}
+
+export interface LinkCardProps {
+  link: LinkItem;
+  showIndex?: number;
+  className?: string;
+}
+
+// Component props
+const { link, showIndex, className = '' } = Astro.props as LinkCardProps;
+
+// Format the date for display
+function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+}
+
+// Truncate description for consistent card heights
+function truncateText(text: string, maxLength: number = 120): string {
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength).trim() + '...';
+}
+
+// Generate domain from URL for display
+function extractDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace('www.', '');
+  } catch {
+    return 'External Link';
+  }
+}
+---
+
+<article class={`link-card ${className}`} aria-labelledby={`link-title-${link.id}`}>
+  <!-- Optional ranking number -->
+  {showIndex && (
+    <div class="link-card-rank" aria-label={`Rank ${showIndex}`}>
+      {showIndex}
+    </div>
+  )}
+
+  <!-- Main content -->
+  <div class="link-card-content">
+    <!-- Title and URL -->
+    <header class="link-card-header">
+      <h3 id={`link-title-${link.id}`} class="link-card-title">
+        <a
+          href={link.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="link-card-link"
+          aria-describedby={`link-desc-${link.id}`}
+        >
+          {link.title}
+        </a>
+      </h3>
+      <p class="link-card-domain" aria-label={`From ${extractDomain(link.url)}`}>
+        {extractDomain(link.url)}
+      </p>
+    </header>
+
+    <!-- Description -->
+    <p id={`link-desc-${link.id}`} class="link-card-description">
+      {truncateText(link.description)}
+    </p>
+
+    <!-- Tags -->
+    {link.tags.length > 0 && (
+      <div class="link-card-tags" aria-label="Tags">
+        {link.tags.map(tag => (
+          <span class="link-card-tag" key={tag}>{tag}</span>
+        ))}
+      </div>
+    )}
+
+    <!-- Metadata footer -->
+    <footer class="link-card-footer">
+      <time class="link-card-date" datetime={link.created_at}>
+        {formatDate(link.created_at)}
+      </time>
+      <span class="link-card-views" aria-label={`${link.view_count} views`}>
+        {link.view_count} {link.view_count === 1 ? 'view' : 'views'}
+      </span>
+    </footer>
+  </div>
+</article>
+
+<style>
+  /* Link Card Container */
+  .link-card {
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: var(--space-lg);
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    height: 100%;
+  }
+
+  .link-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Ranking number */
+  .link-card-rank {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    background-color: var(--color-primary);
+    color: var(--color-bg);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    z-index: 1;
+  }
+
+  /* Content area */
+  .link-card-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  /* Header section */
+  .link-card-header {
+    margin-bottom: var(--space-md);
+  }
+
+  .link-card-title {
+    margin: 0 0 var(--space-xs) 0;
+    line-height: 1.4;
+  }
+
+  .link-card-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 1rem;
+  }
+
+  .link-card-link:hover {
+    text-decoration: underline;
+  }
+
+  .link-card-link:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .link-card-domain {
+    margin: 0;
+    font-size: 0.75rem;
+    color: var(--color-text);
+    opacity: 0.7;
+    font-weight: 400;
+  }
+
+  /* Description */
+  .link-card-description {
+    margin: 0 0 var(--space-md) 0;
+    color: var(--color-text);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    flex: 1;
+  }
+
+  /* Tags section */
+  .link-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-md);
+  }
+
+  .link-card-tag {
+    background-color: var(--color-footer);
+    color: var(--color-text);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: 16px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  /* Footer metadata */
+  .link-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+    padding-top: var(--space-sm);
+    border-top: 1px solid var(--color-border);
+    font-size: 0.75rem;
+    color: var(--color-text);
+    opacity: 0.7;
+  }
+
+  .link-card-date,
+  .link-card-views {
+    font-weight: 400;
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 767px) {
+    .link-card {
+      padding: var(--space-md);
+    }
+
+    .link-card-link {
+      font-size: 0.9rem;
+    }
+
+    .link-card-description {
+      font-size: 0.8rem;
+    }
+  }
+
+  /* Focus management for accessibility */
+  .link-card:focus-within {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .link-card {
+      border-width: 2px;
+    }
+
+    .link-card-tag {
+      border: 1px solid var(--color-text);
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .link-card {
+      transition: none;
+    }
+
+    .link-card:hover {
+      transform: none;
+    }
+  }
+</style>

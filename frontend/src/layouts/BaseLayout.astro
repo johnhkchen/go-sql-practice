@@ -1,0 +1,125 @@
+---
+import Navigation from '../components/Navigation.astro';
+
+export interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = "Link Bookmarks Application" } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content={description}>
+  <title>{title}</title>
+
+  <style is:global>
+    :root {
+      /* Colors */
+      --color-bg: #ffffff;
+      --color-text: #333333;
+      --color-primary: #111111;
+      --color-border: #e5e5e5;
+      --color-footer: #f5f5f5;
+
+      /* Spacing */
+      --space-xs: 0.25rem;
+      --space-sm: 0.5rem;
+      --space-md: 1rem;
+      --space-lg: 2rem;
+      --space-xl: 3rem;
+
+      /* Layout */
+      --max-width: 1200px;
+      --header-height: 60px;
+
+      /* Typography */
+      --font-body: system-ui, -apple-system, sans-serif;
+      --line-height: 1.6;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      font-family: var(--font-body);
+      line-height: var(--line-height);
+      color: var(--color-text);
+      background-color: var(--color-bg);
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    main {
+      flex: 1;
+      width: 100%;
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: var(--space-lg);
+    }
+
+    h1 {
+      color: var(--color-primary);
+      margin-bottom: var(--space-md);
+    }
+
+    p {
+      margin-bottom: var(--space-md);
+    }
+
+    a {
+      color: var(--color-primary);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    @media (max-width: 767px) {
+      main {
+        padding: var(--space-md);
+      }
+    }
+  </style>
+</head>
+<body>
+  <Navigation />
+
+  <main>
+    <slot />
+  </main>
+
+  <footer>
+    <p>&copy; 2024 Link Bookmarks. All rights reserved.</p>
+  </footer>
+
+  <style>
+    footer {
+      background-color: var(--color-footer);
+      border-top: 1px solid var(--color-border);
+      padding: var(--space-lg);
+      text-align: center;
+      margin-top: auto;
+    }
+
+    footer p {
+      margin: 0;
+      font-size: 0.875rem;
+      color: var(--color-text);
+      opacity: 0.8;
+    }
+  </style>
+</body>
+</html>

@@ -14,6 +14,7 @@ func Register(app core.App) {
 		registerStats(e)
 		registerLinksSearch(e)
 		registerLinksSearchSimple(e)
+		registerLinksView(e)
 
 		// Register static file serving (must be last to catch all unmatched routes)
 		registerStatic(e)

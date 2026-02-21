@@ -1,3 +1,30 @@
+# Go
+go-sql-practice
+*.exe
+
+# PocketBase runtime data
+pb_data/
+
 # Frontend
 frontend/node_modules/
 frontend/dist/
+
+# Flox runtime (env definition is tracked, runtime is not)
+.flox/cache/
+.flox/run/
+.flox/log/
+
+# Lisa runtime
+.lisa/
+.lisa-layout.kdl
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,171 @@
+---
+---
+
+<header>
+  <nav>
+    <div class="nav-container">
+      <a href="/" class="nav-brand">Link Bookmarks</a>
+
+      <input type="checkbox" id="nav-toggle" class="nav-toggle" />
+      <label for="nav-toggle" class="nav-toggle-label">
+        <span></span>
+        <span></span>
+        <span></span>
+      </label>
+
+      <ul class="nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/stats">Stats</a></li>
+      </ul>
+    </div>
+  </nav>
+</header>
+
+<style>
+  header {
+    background-color: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  nav {
+    height: var(--header-height);
+  }
+
+  .nav-container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 var(--space-lg);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+  }
+
+  .nav-brand {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .nav-brand:hover {
+    text-decoration: none;
+    opacity: 0.8;
+  }
+
+  .nav-toggle {
+    display: none;
+  }
+
+  .nav-toggle-label {
+    display: none;
+    flex-direction: column;
+    cursor: pointer;
+    width: 30px;
+    height: 30px;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .nav-toggle-label span {
+    display: block;
+    width: 25px;
+    height: 3px;
+    background-color: var(--color-primary);
+    margin: 3px 0;
+    transition: transform 0.3s ease;
+  }
+
+  .nav-links {
+    list-style: none;
+    display: flex;
+    gap: var(--space-lg);
+    margin: 0;
+    padding: 0;
+  }
+
+  .nav-links li {
+    display: inline-block;
+  }
+
+  .nav-links a {
+    color: var(--color-text);
+    text-decoration: none;
+    padding: var(--space-sm) 0;
+    position: relative;
+  }
+
+  .nav-links a::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background-color: var(--color-primary);
+    transition: width 0.3s ease;
+  }
+
+  .nav-links a:hover::after {
+    width: 100%;
+  }
+
+  @media (max-width: 767px) {
+    .nav-container {
+      padding: 0 var(--space-md);
+    }
+
+    .nav-toggle-label {
+      display: flex;
+      order: 2;
+    }
+
+    .nav-toggle:checked ~ .nav-toggle-label span:first-child {
+      transform: rotate(45deg) translateY(9px);
+    }
+
+    .nav-toggle:checked ~ .nav-toggle-label span:nth-child(2) {
+      opacity: 0;
+    }
+
+    .nav-toggle:checked ~ .nav-toggle-label span:last-child {
+      transform: rotate(-45deg) translateY(-9px);
+    }
+
+    .nav-links {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background-color: var(--color-bg);
+      flex-direction: column;
+      padding: var(--space-md);
+      gap: var(--space-sm);
+      border-bottom: 1px solid var(--color-border);
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+    }
+
+    .nav-toggle:checked ~ .nav-links {
+      max-height: 300px;
+    }
+
+    .nav-links li {
+      display: block;
+    }
+
+    .nav-links a {
+      display: block;
+      padding: var(--space-sm) 0;
+    }
+
+    .nav-links a::after {
+      display: none;
+    }
+  }
+</style>
