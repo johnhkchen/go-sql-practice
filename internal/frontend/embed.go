@@ -10,7 +10,7 @@ import (
 var frontendFiles embed.FS
 
 func GetFrontendFS() (fs.FS, error) {
-	subFS, err := fs.Sub(frontendFiles, "frontend/dist")
+	subFS, err := fs.Sub(frontendFiles, "frontend/dist/client")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create frontend sub-filesystem: %w", err)
 	}
