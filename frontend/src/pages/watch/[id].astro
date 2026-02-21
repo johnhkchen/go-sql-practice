@@ -3,6 +3,7 @@
 export const prerender = false;
 
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { progressToStep, formatStepDisplay } from '../../utils/stepConversion';
 
 // Get presentation ID from URL
 const { id } = Astro.params;
@@ -19,11 +20,11 @@ let presentation = null;
 let error = null;
 
 try {
-  // Fetch presentation data with timeout
+  // Fetch presentation data with enhanced status endpoint
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
-  const response = await fetch(`${API_BASE}/api/collections/presentations/records/${id}`, {
+  const response = await fetch(`${API_BASE}/api/presentations/${id}/status`, {
     signal: controller.signal,
     headers: {
       'Accept': 'application/json'
@@ -50,6 +51,17 @@ try {
 // Determine view state
 const isLive = presentation && presentation.active_session !== null;
 const isWaiting = presentation && presentation.active_session === null;
+
+// Calculate step information for live presentations
+let currentStep = 0;
+let stepDisplay = '';
+let sessionId = null;
+
+if (isLive && presentation) {
+  currentStep = presentation.current_step || progressToStep(presentation.progress || 0, presentation.step_count || 1);
+  stepDisplay = formatStepDisplay(currentStep, presentation.step_count || 1, presentation.step_labels);
+  sessionId = presentation.active_session;
+}
 
 // Error messages
 const errorMessages = {
@@ -83,22 +95,72 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
     </div>
   )}
 
-  {isLive && (
-    <div class="live-container">
-      <h1 class="live-title">{presentation.name}</h1>
-      <p class="live-message">This presentation is currently live!</p>
-      <div class="live-indicator">
-        <span class="live-dot"></span>
-        <span>LIVE</span>
-      </div>
-    </div>
-  )}
+  {presentation && (
+    <div class="presentation-container" data-state={isLive ? 'live' : 'waiting'} id="presentation-container">
+      <h1 class="presentation-title" id="presentation-title">{presentation.name}</h1>
 
-  {isWaiting && (
-    <div class="waiting-container">
-      <h1 class="waiting-title">{presentation.name}</h1>
-      <p class="waiting-message">Waiting for presenter to start...</p>
-      <div class="waiting-indicator animate-pulse"></div>
+      <!-- Connection Status -->
+      <div class="connection-status" id="connection-status">
+        <span class="status-indicator" id="status-indicator"></span>
+        <span class="status-text" id="status-text">{isLive ? 'Connecting...' : 'Waiting...'}</span>
+        <span class="last-update" id="last-update"></span>
+      </div>
+
+      <!-- Waiting State Content -->
+      <div class="waiting-content" data-show="waiting">
+        <p class="waiting-message">Waiting for presenter to start...</p>
+        <div class="waiting-indicator animate-pulse"></div>
+      </div>
+
+      <!-- Transition State Content -->
+      <div class="transition-content" data-show="starting">
+        <p class="transition-message" id="transition-message">Presentation starting...</p>
+        <div class="transition-indicator animate-pulse"></div>
+      </div>
+
+      <!-- Live State Content -->
+      <div class="live-content" data-show="live">
+        <!-- Step Display -->
+        <div class="step-section">
+          <h2 class="step-heading" id="step-heading">{stepDisplay}</h2>
+
+          <!-- Step Progress Indicators -->
+          <div class="step-indicators" id="step-indicators">
+            {Array.from({ length: presentation.step_count || 1 }, (_, i) => (
+              <div
+                class={`step-dot ${i === currentStep ? 'active' : ''}`}
+                aria-label={`Step ${i + 1}`}
+              />
+            ))}
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="progress-container">
+            <progress
+              class="progress-bar"
+              id="progress-bar"
+              value={presentation.progress || 0}
+              max="1"
+              aria-labelledby="step-heading">
+            </progress>
+            <div class="progress-label" id="progress-label">
+              {Math.round((presentation.progress || 0) * 100)}%
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Indicator -->
+        <div class="live-indicator">
+          <span class="live-dot"></span>
+          <span>LIVE</span>
+        </div>
+      </div>
+
+      <!-- End State Content -->
+      <div class="end-content" data-show="ended">
+        <p class="end-message">Presentation ended</p>
+        <button class="wait-again-btn" id="wait-again-btn">Wait for next session</button>
+      </div>
     </div>
   )}
 </BaseLayout>
@@ -109,8 +171,7 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
 
   /* Common container styles */
   .error-container,
-  .live-container,
-  .waiting-container {
+  .presentation-container {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -120,19 +181,69 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
     padding: var(--space-lg);
   }
 
-  /* Waiting room styles */
-  .waiting-title {
+  /* Presentation container with state-based transitions */
+  .presentation-container {
+    transition: opacity 0.3s ease-in-out;
+    position: relative;
+  }
+
+  .presentation-container.transitioning {
+    opacity: 0.8;
+  }
+
+  /* State-based content visibility */
+  .waiting-content,
+  .transition-content,
+  .live-content,
+  .end-content {
+    display: none;
+    width: 100%;
+  }
+
+  .presentation-container[data-state="waiting"] .waiting-content,
+  .presentation-container[data-state="starting"] .transition-content,
+  .presentation-container[data-state="live"] .live-content,
+  .presentation-container[data-state="ended"] .end-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Fade transitions between states */
+  .waiting-content,
+  .transition-content,
+  .live-content,
+  .end-content {
+    opacity: 1;
+    transition: opacity 0.3s ease-in-out;
+  }
+
+  .presentation-container.transitioning .waiting-content,
+  .presentation-container.transitioning .transition-content,
+  .presentation-container.transitioning .live-content,
+  .presentation-container.transitioning .end-content {
+    opacity: 0;
+  }
+
+  /* Presentation title (shared across states) */
+  .presentation-title {
     font-size: 2rem;
     margin-bottom: var(--space-md);
     color: var(--color-primary);
     font-weight: 600;
   }
 
+  /* Waiting state styles */
+  .waiting-content {
+    gap: var(--space-lg);
+  }
+
   .waiting-message {
     font-size: 1.125rem;
     color: var(--color-text);
     opacity: 0.8;
-    margin-bottom: var(--space-lg);
+    margin: 0;
   }
 
   .waiting-indicator {
@@ -141,6 +252,54 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
     border-radius: 50%;
     background: linear-gradient(135deg, var(--color-primary), var(--color-border));
     opacity: 0.2;
+  }
+
+  /* Transition state styles */
+  .transition-content {
+    gap: var(--space-lg);
+  }
+
+  .transition-message {
+    font-size: 1.125rem;
+    color: var(--color-primary);
+    font-weight: 500;
+    margin: 0;
+  }
+
+  .transition-indicator {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    opacity: 0.4;
+  }
+
+  /* End state styles */
+  .end-content {
+    gap: var(--space-lg);
+  }
+
+  .end-message {
+    font-size: 1.125rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    margin: 0;
+  }
+
+  .wait-again-btn {
+    color: var(--color-primary);
+    background-color: transparent;
+    border: 1px solid var(--color-border);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .wait-again-btn:hover {
+    background-color: var(--color-footer);
+    border-color: var(--color-primary);
   }
 
   /* Error styles */
@@ -173,25 +332,27 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
     text-decoration: none;
   }
 
-  /* Live view styles */
-  .live-title {
-    font-size: 2rem;
-    margin-bottom: var(--space-md);
-    color: var(--color-primary);
+  /* Live content layout */
+  .live-content {
+    gap: var(--space-lg);
+    width: 100%;
   }
 
   .live-message {
     font-size: 1.125rem;
     color: var(--color-text);
     margin-bottom: var(--space-lg);
+    text-align: center;
   }
 
   .live-indicator {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: var(--space-sm);
     font-weight: 600;
     color: #dc2626;
+    margin-top: var(--space-lg);
   }
 
   .live-dot {
@@ -202,23 +363,190 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
     animation: pulse 1s infinite;
   }
 
+  /* Connection Status */
+  .connection-status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+    font-size: 0.875rem;
+  }
+
+  .status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #6b7280;
+    transition: background-color 0.3s ease;
+  }
+
+  .status-indicator.connected {
+    background-color: #10b981;
+  }
+
+  .status-indicator.connecting {
+    background-color: #f59e0b;
+    animation: pulse 1s infinite;
+  }
+
+  .status-indicator.disconnected {
+    background-color: #ef4444;
+  }
+
+  .status-text {
+    color: var(--color-text);
+    opacity: 0.8;
+  }
+
+  .last-update {
+    color: var(--color-text);
+    opacity: 0.6;
+    font-size: 0.75rem;
+    margin-left: auto;
+  }
+
+  /* Step Display */
+  .step-section {
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: var(--space-lg);
+    margin-bottom: var(--space-lg);
+  }
+
+  .step-heading {
+    color: var(--color-primary);
+    margin-bottom: var(--space-md);
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  /* Step Progress Indicators */
+  .step-indicators {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+    flex-wrap: wrap;
+  }
+
+  .step-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: var(--color-border);
+    transition: all 0.3s ease;
+    cursor: default;
+  }
+
+  .step-dot.active {
+    background-color: var(--color-primary);
+    transform: scale(1.2);
+  }
+
+  /* Progress Container */
+  .progress-container {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+  }
+
+  .progress-bar {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    border: none;
+    background-color: var(--color-border);
+    transition: all 0.3s ease;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .progress-bar::-webkit-progress-bar {
+    background-color: var(--color-border);
+    border-radius: 4px;
+  }
+
+  .progress-bar::-webkit-progress-value {
+    background-color: var(--color-primary);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+  }
+
+  .progress-bar::-moz-progress-bar {
+    background-color: var(--color-primary);
+    border-radius: 4px;
+  }
+
+  .progress-label {
+    min-width: 50px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 0.875rem;
+    color: var(--color-primary);
+    font-weight: 500;
+  }
+
+  /* Connection status positioning */
+  .connection-status {
+    margin-bottom: var(--space-lg);
+  }
+
   /* Mobile responsive */
   @media (max-width: 767px) {
-    .waiting-title,
-    .error-title,
-    .live-title {
+    .presentation-title,
+    .error-title {
       font-size: 1.5rem;
     }
 
     .waiting-message,
-    .error-message,
-    .live-message {
+    .transition-message,
+    .end-message,
+    .error-message {
       font-size: 1rem;
     }
 
     .waiting-indicator {
       width: 50px;
       height: 50px;
+    }
+
+    .step-heading {
+      font-size: 1rem;
+    }
+
+    .step-section {
+      padding: var(--space-md);
+    }
+
+    .progress-container {
+      flex-direction: column;
+      gap: var(--space-sm);
+    }
+
+    .progress-label {
+      text-align: center;
+    }
+
+    .step-indicators {
+      gap: var(--space-xs);
+    }
+
+    .step-dot {
+      width: 10px;
+      height: 10px;
+    }
+
+    .connection-status {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: var(--space-xs);
+    }
+
+    .last-update {
+      margin-left: 0;
     }
   }
 
@@ -227,37 +555,355 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
     .waiting-indicator {
       opacity: 0.4;
     }
+
+    .status-indicator.connecting,
+    .live-dot {
+      animation: none;
+    }
+
+    .step-dot,
+    .progress-bar,
+    .progress-bar::-webkit-progress-value {
+      transition: none;
+    }
   }
 </style>
 
-<script>
-  // Progressive enhancement: add live status checking
-  if (typeof window !== 'undefined') {
-    const presentationId = window.location.pathname.split('/')[2];
-    const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
-
-    // Only add enhancement if we're in the waiting state
-    if (document.querySelector('.waiting-container')) {
-      const checkInterval = setInterval(async () => {
-        try {
-          const response = await fetch(`${API_BASE}/api/collections/presentations/records/${presentationId}`);
-          if (response.ok) {
-            const presentation = await response.json();
-            // If session becomes active, reload the page to show live view
-            if (presentation.active_session !== null) {
-              window.location.reload();
-            }
-          }
-        } catch (err) {
-          // Silently fail - the page still works without this enhancement
-          console.log('Status check failed:', err);
-        }
-      }, 5000); // Check every 5 seconds
-
-      // Clean up on page unload
-      window.addEventListener('beforeunload', () => {
-        clearInterval(checkInterval);
-      });
+{presentation && (
+  <script client:load define:vars={{
+    presentationId: id,
+    sessionId: sessionId,
+    initialProgress: presentation.progress || 0,
+    stepCount: presentation.step_count || 1,
+    stepLabels: presentation.step_labels || [],
+    apiBase: API_BASE,
+    initialState: isLive ? 'live' : 'waiting'
+  }}>
+    // Step conversion utilities (inlined for client script)
+    function progressToStep(progress, stepCount) {
+      if (stepCount <= 1) return 0;
+      const clampedProgress = Math.max(0.0, Math.min(progress, 1.0));
+      return Math.round(clampedProgress * (stepCount - 1));
     }
-  }
-</script>
+
+    function formatStepDisplay(stepIndex, stepCount, stepLabels) {
+      const stepNumber = stepIndex + 1;
+      let display = `Step ${stepNumber} of ${stepCount}`;
+      if (stepLabels && stepLabels[stepIndex]) {
+        display += ` — ${stepLabels[stepIndex]}`;
+      }
+      return display;
+    }
+
+    class PresentationAutoViewer {
+      constructor(presentationId, sessionId, initialProgress, stepCount, stepLabels, apiBase, initialState) {
+        this.presentationId = presentationId;
+        this.sessionId = sessionId;
+        this.currentProgress = initialProgress;
+        this.stepCount = stepCount;
+        this.stepLabels = stepLabels;
+        this.apiBase = apiBase;
+
+        // State management
+        this.currentState = initialState; // 'waiting', 'starting', 'live', 'ended'
+        this.connectionStatus = 'disconnected';
+        this.eventSource = null;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 10;
+
+        // DOM elements
+        this.container = document.getElementById('presentation-container');
+        this.statusIndicator = document.getElementById('status-indicator');
+        this.statusText = document.getElementById('status-text');
+        this.lastUpdate = document.getElementById('last-update');
+        this.stepHeading = document.getElementById('step-heading');
+        this.stepIndicators = document.getElementById('step-indicators');
+        this.progressBar = document.getElementById('progress-bar');
+        this.progressLabel = document.getElementById('progress-label');
+        this.transitionMessage = document.getElementById('transition-message');
+        this.waitAgainBtn = document.getElementById('wait-again-btn');
+
+        // Initialize
+        this.currentStep = progressToStep(this.currentProgress, this.stepCount);
+        this.updateConnectionStatus('connecting');
+        this.updateLastUpdate('Initializing...');
+        this.setupEventListeners();
+        this.connect();
+        console.log('PresentationAutoViewer initialized for presentation:', this.presentationId, 'Initial state:', this.currentState);
+      }
+
+      setupEventListeners() {
+        // Wait again button for ended state
+        if (this.waitAgainBtn) {
+          this.waitAgainBtn.addEventListener('click', () => {
+            this.transitionToState('waiting');
+          });
+        }
+      }
+
+      transitionToState(newState, transitionMessage = null) {
+        if (this.currentState === newState) return;
+
+        console.log(`Transitioning from ${this.currentState} to ${newState}`);
+
+        // Add transitioning class for fade effect
+        if (this.container) {
+          this.container.classList.add('transitioning');
+        }
+
+        // Update transition message if provided
+        if (transitionMessage && this.transitionMessage) {
+          this.transitionMessage.textContent = transitionMessage;
+        }
+
+        // After transition delay, update the state
+        setTimeout(() => {
+          this.currentState = newState;
+          if (this.container) {
+            this.container.setAttribute('data-state', newState);
+            this.container.classList.remove('transitioning');
+          }
+          console.log(`State transition completed: ${newState}`);
+        }, 300); // Match CSS transition duration
+      }
+
+      updateLastUpdate(message) {
+        if (this.lastUpdate) {
+          const now = new Date().toLocaleTimeString();
+          this.lastUpdate.textContent = message ? `${message}` : `Updated ${now}`;
+        }
+      }
+
+      updateConnectionStatus(status) {
+        if (!this.statusIndicator || !this.statusText) return;
+
+        this.connectionStatus = status;
+        this.statusIndicator.className = `status-indicator ${status}`;
+
+        switch (status) {
+          case 'connected':
+            this.statusText.textContent = 'Connected';
+            break;
+          case 'connecting':
+            this.statusText.textContent = 'Connecting...';
+            break;
+          case 'disconnected':
+            this.statusText.textContent = 'Disconnected';
+            break;
+        }
+      }
+
+      connect() {
+        if (this.eventSource) {
+          this.eventSource.close();
+        }
+
+        try {
+          this.eventSource = new EventSource(`${this.apiBase}/api/realtime`);
+
+          this.eventSource.onopen = () => this.handleConnect();
+          this.eventSource.onmessage = (event) => this.handleMessage(event);
+          this.eventSource.onerror = () => this.handleError();
+
+          console.log('SSE connection established to:', `${this.apiBase}/api/realtime`);
+        } catch (error) {
+          console.error('Failed to create SSE connection:', error);
+          this.handleError();
+        }
+      }
+
+      handleConnect() {
+        console.log('SSE connection opened');
+        this.updateConnectionStatus('connected');
+        this.updateLastUpdate('Connected');
+        this.reconnectAttempts = 0;
+      }
+
+      handleMessage(event) {
+        try {
+          const data = JSON.parse(event.data);
+          console.log('SSE message received:', data);
+
+          // Handle presentations collection changes (state transitions)
+          if (data.collection === 'presentations' &&
+              data.action === 'update' &&
+              data.record &&
+              data.record.id === this.presentationId) {
+            this.handlePresentationStateChange(data.record);
+          }
+
+          // Handle sync_sessions collection updates (progress updates)
+          if (data.collection === 'sync_sessions' &&
+              data.action === 'update' &&
+              data.record &&
+              data.record.id === this.sessionId) {
+            console.log('Progress update received:', data.record.progress);
+            this.updateProgress(data.record.progress);
+            this.updateLastUpdate();
+          }
+        } catch (error) {
+          console.warn('Invalid SSE message:', error);
+        }
+      }
+
+      handlePresentationStateChange(presentationRecord) {
+        const newActiveSession = presentationRecord.active_session;
+        console.log('Presentation state change:', {
+          currentState: this.currentState,
+          newActiveSession: newActiveSession,
+          currentSessionId: this.sessionId
+        });
+
+        // Waiting → Live transition
+        if (this.currentState === 'waiting' && newActiveSession !== null) {
+          this.sessionId = newActiveSession;
+          this.transitionToState('starting', 'Presentation starting...');
+
+          // After showing starting message, transition to live
+          setTimeout(() => {
+            this.transitionToState('live');
+            this.updateConnectionStatus('connected');
+            this.updateLastUpdate('Live presentation started');
+          }, 1500);
+        }
+
+        // Live → Ended transition
+        else if ((this.currentState === 'live' || this.currentState === 'starting') && newActiveSession === null) {
+          this.transitionToState('ended');
+          this.updateConnectionStatus('disconnected');
+          this.updateLastUpdate('Presentation ended');
+
+          // Update session ID
+          this.sessionId = null;
+        }
+
+        // Ended → Live transition (new session started)
+        else if (this.currentState === 'ended' && newActiveSession !== null) {
+          this.sessionId = newActiveSession;
+          this.transitionToState('starting', 'New presentation starting...');
+
+          setTimeout(() => {
+            this.transitionToState('live');
+            this.updateConnectionStatus('connected');
+            this.updateLastUpdate('Live presentation started');
+          }, 1500);
+        }
+      }
+
+      handleError() {
+        console.log('SSE connection error or closed');
+        this.updateConnectionStatus('disconnected');
+        this.updateLastUpdate('Connection lost');
+
+        // Attempt to reconnect with exponential backoff
+        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+          const delay = Math.pow(2, this.reconnectAttempts) * 1000; // 1s, 2s, 4s, 8s...
+          this.reconnectAttempts++;
+
+          setTimeout(() => {
+            console.log(`Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
+            this.updateConnectionStatus('connecting');
+            this.updateLastUpdate('Reconnecting...');
+            this.connect();
+          }, delay);
+        }
+      }
+
+
+      updateProgress(progress) {
+        this.currentProgress = progress;
+
+        // Calculate new step
+        const newStep = progressToStep(progress, this.stepCount);
+
+        // Update progress bar
+        if (this.progressBar) {
+          this.progressBar.value = progress;
+        }
+
+        // Update progress label
+        if (this.progressLabel) {
+          this.progressLabel.textContent = `${Math.round(progress * 100)}%`;
+        }
+
+        // Update step display if step changed
+        if (newStep !== this.currentStep) {
+          this.updateStepDisplay(newStep);
+          this.announceStepChange(newStep);
+        }
+
+        console.log('Progress updated to:', progress, 'Step:', newStep);
+      }
+
+      updateStepDisplay(newStep) {
+        this.currentStep = newStep;
+
+        // Update step heading
+        if (this.stepHeading) {
+          const stepDisplay = formatStepDisplay(newStep, this.stepCount, this.stepLabels);
+          this.stepHeading.textContent = stepDisplay;
+        }
+
+        // Update step indicators
+        if (this.stepIndicators) {
+          const dots = this.stepIndicators.querySelectorAll('.step-dot');
+          dots.forEach((dot, index) => {
+            if (index === newStep) {
+              dot.classList.add('active');
+            } else {
+              dot.classList.remove('active');
+            }
+          });
+        }
+      }
+
+      announceStepChange(newStep) {
+        // Create a live region announcement for screen readers
+        const announcement = document.createElement('div');
+        announcement.setAttribute('aria-live', 'polite');
+        announcement.setAttribute('aria-atomic', 'true');
+        announcement.style.position = 'absolute';
+        announcement.style.left = '-10000px';
+        announcement.style.width = '1px';
+        announcement.style.height = '1px';
+        announcement.style.overflow = 'hidden';
+
+        const stepDisplay = formatStepDisplay(newStep, this.stepCount, this.stepLabels);
+        announcement.textContent = `Now on ${stepDisplay}`;
+
+        document.body.appendChild(announcement);
+
+        // Remove after announcement
+        setTimeout(() => {
+          document.body.removeChild(announcement);
+        }, 1000);
+      }
+
+      destroy() {
+        if (this.eventSource) {
+          this.eventSource.close();
+          this.eventSource = null;
+        }
+      }
+    }
+
+    // Initialize the presentation auto viewer
+    window.presentationAutoViewer = new PresentationAutoViewer(
+      presentationId,
+      sessionId,
+      initialProgress,
+      stepCount,
+      stepLabels,
+      apiBase,
+      initialState
+    );
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      if (window.presentationAutoViewer) {
+        window.presentationAutoViewer.destroy();
+      }
+    });
+  </script>
+)}
+
