@@ -7,15 +7,25 @@ SERVER_PORT := 127.0.0.1:8090
 .DEFAULT_GOAL := help
 .PHONY: build frontend backend clean dev test help validate-build
 
-build: frontend backend
+build: frontend backend validate-build
 
 frontend:
 	@echo "Building frontend..."
-	cd frontend && npm ci && npm run build
+	cd $(FRONTEND_DIR) && npm ci && npm run build
+	@if [ ! -d "$(DIST_DIR)/client" ]; then \
+		echo "Error: Frontend build failed - client directory not created"; \
+		exit 1; \
+	fi
+	@echo "Frontend build complete"
 
-backend:
+backend: frontend
 	@echo "Building backend..."
+	@if [ ! -d "$(DIST_DIR)" ]; then \
+		echo "Error: Frontend not built. Run 'make frontend' first."; \
+		exit 1; \
+	fi
 	flox activate -- go build -o $(BINARY_NAME)
+	@echo "Backend build complete"
 
 clean:
 	@echo "Cleaning build artifacts..."
@@ -24,12 +34,24 @@ clean:
 	rm -rf pb_data
 	@echo "Clean complete"
 
-dev:
+dev: build
 	@echo "Starting development server..."
+	@echo "Server will be available at http://$(SERVER_PORT)"
+	@echo "Press Ctrl+C to stop"
 	./$(BINARY_NAME) serve --http="$(SERVER_PORT)"
 
 test:
 	flox activate -- go test ./...
+
+validate-build:
+	@echo "Validating build artifacts..."
+	@if [ ! -f "$(BINARY_NAME)" ]; then \
+		echo "Error: Binary not created"; exit 1; \
+	fi
+	@if [ ! -d "$(DIST_DIR)" ]; then \
+		echo "Error: Frontend assets missing"; exit 1; \
+	fi
+	@echo "Build validation successful"
 
 help:
 	@echo "Available targets:"
