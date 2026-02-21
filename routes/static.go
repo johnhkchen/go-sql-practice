@@ -1,14 +1,14 @@
 package routes
 
 import (
+	"io"
 	"io/fs"
 	"net/http"
 	"strings"
 
 	"github.com/jchen/go-sql-practice/internal/frontend"
-	"github.com/labstack/echo/v5"
-	"github.com/labstack/echo/v5/middleware"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/hook"
 )
 
 type spaFS struct {
@@ -34,14 +34,52 @@ func (s *spaFS) Open(name string) (fs.File, error) {
 func registerStatic(e *core.ServeEvent) {
 	frontendFS, err := frontend.GetFrontendFS()
 	if err != nil {
-		e.App.Logger().Error("Failed to get frontend filesystem", "error", err)
+		e.App.Logger().Error("Frontend assets not available", "error", err)
 		return
 	}
 
+	e.App.Logger().Info("Initializing static file serving")
+
 	spaFilesystem := &spaFS{fs: frontendFS}
-	e.Router.Use(middleware.StaticWithConfig(middleware.StaticConfig{
-		Root:       "/",
-		Filesystem: http.FS(spaFilesystem),
-		Browse:     false,
-	}))
+
+	e.Router.Bind(&hook.Handler[*core.RequestEvent]{
+		Func: func(ev *core.RequestEvent) error {
+			// Skip API routes and admin routes
+			path := ev.Request.URL.Path
+			if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/_/") {
+				return ev.Next()
+			}
+
+			// Try to serve the static file
+			file, err := spaFilesystem.Open(strings.TrimPrefix(path, "/"))
+			if err != nil {
+				// File not found, continue to next handler
+				return ev.Next()
+			}
+			defer file.Close()
+
+			// Get file info for content type detection
+			stat, err := file.Stat()
+			if err != nil {
+				return ev.Next()
+			}
+
+			// Convert fs.File to io.ReadSeeker if possible
+			if readSeeker, ok := file.(io.ReadSeeker); ok {
+				http.ServeContent(ev.Response, ev.Request, stat.Name(), stat.ModTime(), readSeeker)
+				return nil
+			}
+
+			// If not a ReadSeeker, fall back to copying the content
+			ev.Response.Header().Set("Content-Type", "application/octet-stream")
+			_, err = ev.Response.Write([]byte("file serving not supported"))
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+		Priority: -500, // Run before other route handlers but after auth
+	})
+
+	e.App.Logger().Info("Static file serving enabled")
 }

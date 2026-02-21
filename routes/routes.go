@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"github.com/jchen/go-sql-practice/internal/frontend"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -16,8 +17,12 @@ func Register(app core.App) {
 		registerLinksSearchSimple(e)
 		registerLinksView(e)
 
-		// Register static file serving (must be last to catch all unmatched routes)
-		registerStatic(e)
+		// Register static file serving with availability check
+		if frontend.FrontendExists() {
+			registerStatic(e)
+		} else {
+			e.App.Logger().Warn("Frontend assets not found, static serving disabled")
+		}
 
 		// Continue middleware chain
 		return e.Next()
