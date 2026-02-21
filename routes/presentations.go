@@ -40,7 +40,8 @@ type StatusResponse struct {
 	CurrentStep *int     `json:"current_step,omitempty"`
 }
 
-// registerPresentations registers presentation lifecycle routes
+// registerPresentations registers presentation lifecycle routes with the PocketBase router.
+// These routes handle the live session workflow that PocketBase's built-in CRUD API cannot manage.
 func registerPresentations(e *core.ServeEvent) {
 	// GET /api/presentations/:id/status - Get presentation status with live info
 	e.Router.GET("/api/presentations/:id/status", func(ev *core.RequestEvent) error {
@@ -89,7 +90,8 @@ func generateAdminToken() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-// progressToStep converts a progress value (0-1) to a step index
+// progressToStep converts a progress value (0-1) to a step index using the formula:
+// step_index = round(progress * (step_count - 1)) for step_count > 1, else 0
 func progressToStep(progress float64, stepCount int) int {
 	if stepCount <= 1 {
 		return 0
@@ -99,7 +101,8 @@ func progressToStep(progress float64, stepCount int) int {
 	return int(stepProgress + 0.5)
 }
 
-// stepToProgress converts a step index to progress value (0-1)
+// stepToProgress converts a step index to progress value (0-1) using the formula:
+// progress = step_index / (step_count - 1) for step_count > 1, else 0.0
 func stepToProgress(stepIndex int, stepCount int) float64 {
 	if stepCount <= 1 {
 		return 0.0
