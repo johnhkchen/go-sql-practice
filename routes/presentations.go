@@ -178,10 +178,37 @@ func validateToken(provided, stored string) bool {
 // Placeholder handler functions - to be implemented in subsequent steps
 
 func handleGetStatus(e *core.RequestEvent, app core.App) error {
-	// TODO: Implement in Step 2
-	return e.JSON(http.StatusNotImplemented, map[string]string{
-		"error": "Status endpoint not yet implemented",
-	})
+	// Get presentation ID from URL
+	presentationID := e.Request.PathValue("id")
+	if presentationID == "" {
+		return e.JSON(http.StatusBadRequest, map[string]string{
+			"error": "Missing presentation ID",
+		})
+	}
+
+	// Find the presentation record
+	presentation, err := app.FindRecordById("presentations", presentationID)
+	if err != nil {
+		return e.JSON(http.StatusNotFound, map[string]string{
+			"error": "Presentation not found",
+		})
+	}
+
+	// Check if presentation has an active session
+	var session *core.Record
+	activeSessionID := presentation.GetString("active_session")
+	if activeSessionID != "" {
+		session, err = app.FindRecordById("sync_sessions", activeSessionID)
+		if err != nil {
+			// If session not found, treat as not live (orphaned reference)
+			session = nil
+		}
+	}
+
+	// Build enhanced status response
+	response := buildStatusResponse(presentation, session)
+
+	return e.JSON(http.StatusOK, response)
 }
 
 func handleStopLive(e *core.RequestEvent, app core.App) error {
