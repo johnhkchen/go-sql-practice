@@ -1,9 +1,11 @@
 # Go
 go-sql-practice
 *.exe
+*.test
 
 # PocketBase runtime data
 pb_data/
+routes/pb_data/
 
 # Frontend
 frontend/node_modules/
