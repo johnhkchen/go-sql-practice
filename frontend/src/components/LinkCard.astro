@@ -81,7 +81,9 @@ function extractDomain(url: string): string {
     {link.tags.length > 0 && (
       <div class="link-card-tags" aria-label="Tags">
         {link.tags.map(tag => (
-          <span class="link-card-tag" key={tag}>{tag}</span>
+          <a href={`/tags/${tag}`} class="link-card-tag" key={tag}>
+            {tag}
+          </a>
         ))}
       </div>
     )}
@@ -202,6 +204,24 @@ function extractDomain(url: string): string {
     font-size: 0.75rem;
     font-weight: 500;
     white-space: nowrap;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    display: inline-block;
+  }
+
+  .link-card-tag:hover {
+    background-color: var(--color-primary);
+    color: var(--color-bg);
+    transform: translateY(-1px);
+  }
+
+  .link-card-tag:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .link-card-tag:active {
+    transform: translateY(0);
   }
 
   /* Footer metadata */
