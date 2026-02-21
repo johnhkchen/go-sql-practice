@@ -9,5 +9,10 @@ export default defineConfig({
   build: {
     assets: 'assets',
     format: 'directory'
+  },
+  server: {
+    proxy: {
+      '/api': 'http://127.0.0.1:8090'
+    }
   }
 });
