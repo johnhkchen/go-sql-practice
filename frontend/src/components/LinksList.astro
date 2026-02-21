@@ -1,0 +1,277 @@
+---
+// Import the LinkItem interface and LinkCard component
+import LinkCard, { type LinkItem } from './LinkCard.astro';
+
+// Component interface
+interface Props {
+  links: LinkItem[];
+  totalCount: number;
+  searchQuery?: string;
+  isSearchResult?: boolean;
+  className?: string;
+}
+
+const {
+  links,
+  totalCount,
+  searchQuery = '',
+  isSearchResult = false,
+  className = ''
+} = Astro.props;
+
+// Determine display context
+const hasLinks = links.length > 0;
+const isEmpty = links.length === 0;
+
+// Format results header text
+function getResultsText(count: number, query: string, isSearch: boolean): string {
+  if (isSearch && query) {
+    return count === 0
+      ? `No results found for "${query}"`
+      : `${count} ${count === 1 ? 'result' : 'results'} for "${query}"`;
+  }
+  return count === 0
+    ? 'No links available'
+    : `${count} ${count === 1 ? 'link' : 'links'} available`;
+}
+
+const resultsText = getResultsText(totalCount, searchQuery, isSearchResult);
+---
+
+<div class={`links-list-container ${className}`}>
+  <!-- Results context header -->
+  {(hasLinks || isEmpty) && (
+    <header class="links-list-header">
+      <p class="links-list-count" aria-live="polite">
+        {resultsText}
+      </p>
+    </header>
+  )}
+
+  <!-- Empty state -->
+  {isEmpty && (
+    <div class="empty-state" role="status" aria-label="No links found">
+      <div class="empty-icon">
+        {isSearchResult && searchQuery ? '🔍' : '📚'}
+      </div>
+      <div class="empty-content">
+        <h2 class="empty-title">
+          {isSearchResult && searchQuery
+            ? `No results for "${searchQuery}"`
+            : 'No links available'}
+        </h2>
+        <p class="empty-message">
+          {isSearchResult && searchQuery
+            ? 'Try adjusting your search terms or browse all links below.'
+            : 'Links will appear here once they are added to the collection.'}
+        </p>
+        {isSearchResult && (
+          <div class="empty-actions">
+            <button
+              type="button"
+              class="clear-search-button"
+              onclick="window.location.href = '/'"
+            >
+              Clear Search
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
+
+  <!-- Links grid -->
+  {hasLinks && (
+    <div class="links-grid" role="main" aria-label="Links list">
+      {links.map((link) => (
+        <LinkCard link={link} />
+      ))}
+    </div>
+  )}
+</div>
+
+<style>
+  /* Main container */
+  .links-list-container {
+    width: 100%;
+  }
+
+  /* Results header */
+  .links-list-header {
+    margin-bottom: var(--space-lg);
+    padding-bottom: var(--space-md);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .links-list-count {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  /* Empty state styles */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 40vh;
+    padding: var(--space-xl);
+  }
+
+  .empty-icon {
+    font-size: 3rem;
+    margin-bottom: var(--space-lg);
+    opacity: 0.6;
+    line-height: 1;
+  }
+
+  .empty-content {
+    max-width: 500px;
+  }
+
+  .empty-title {
+    font-size: 1.5rem;
+    margin-bottom: var(--space-md);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .empty-message {
+    font-size: 1rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    margin-bottom: var(--space-lg);
+    line-height: 1.6;
+  }
+
+  .empty-actions {
+    display: flex;
+    justify-content: center;
+  }
+
+  .clear-search-button {
+    color: var(--color-primary);
+    background-color: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: var(--space-sm) var(--space-lg);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .clear-search-button:hover {
+    background-color: var(--color-footer);
+    border-color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .clear-search-button:focus {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  .clear-search-button:active {
+    transform: translateY(1px);
+  }
+
+  /* Links grid - matching tag page pattern */
+  .links-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: var(--space-lg);
+    margin-bottom: var(--space-xl);
+  }
+
+  /* Responsive design */
+  @media (max-width: 767px) {
+    .empty-state {
+      padding: var(--space-lg);
+      min-height: 30vh;
+    }
+
+    .empty-icon {
+      font-size: 2.5rem;
+    }
+
+    .empty-title {
+      font-size: 1.25rem;
+    }
+
+    .empty-message {
+      font-size: 0.9rem;
+    }
+
+    .links-grid {
+      grid-template-columns: 1fr;
+      gap: var(--space-md);
+    }
+
+    .links-list-count {
+      font-size: 0.9rem;
+    }
+
+    .clear-search-button {
+      font-size: 0.85rem;
+      padding: var(--space-xs) var(--space-md);
+    }
+  }
+
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .links-grid {
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    }
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .empty-state {
+      border: 2px solid var(--color-border);
+      border-radius: 8px;
+    }
+
+    .clear-search-button {
+      border-width: 2px;
+    }
+
+    .links-list-header {
+      border-bottom-width: 2px;
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .clear-search-button {
+      transition: none;
+    }
+
+    .clear-search-button:active {
+      transform: none;
+    }
+  }
+
+  /* Focus management for accessibility */
+  .links-grid:focus-within {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 4px;
+    border-radius: 4px;
+  }
+
+  /* Ensure proper spacing between header and grid */
+  .links-list-header + .links-grid {
+    margin-top: 0;
+  }
+
+  /* Loading state preparation (for future client-side updates) */
+  .links-grid[data-loading="true"] {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+</style>
