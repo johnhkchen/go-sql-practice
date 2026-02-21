@@ -1,4 +1,10 @@
-.PHONY: build frontend backend clean dev test
+# Configuration variables
+BINARY_NAME := go-sql-practice
+FRONTEND_DIR := frontend
+DIST_DIR := $(FRONTEND_DIR)/dist
+SERVER_PORT := 127.0.0.1:8090
+
+.PHONY: build frontend backend clean dev test help validate-build
 
 build: frontend backend
 
@@ -8,16 +14,16 @@ frontend:
 
 backend:
 	@echo "Building backend..."
-	go build -o go-sql-practice
+	flox activate -- go build -o $(BINARY_NAME)
 
 clean:
 	@echo "Cleaning build artifacts..."
-	rm -rf frontend/dist
-	rm -f go-sql-practice
+	rm -rf $(DIST_DIR)
+	rm -f $(BINARY_NAME)
 
 dev:
 	@echo "Starting development server..."
-	./go-sql-practice serve --http="127.0.0.1:8090"
+	./$(BINARY_NAME) serve --http="$(SERVER_PORT)"
 
 test:
-	go test ./...
+	flox activate -- go test ./...
