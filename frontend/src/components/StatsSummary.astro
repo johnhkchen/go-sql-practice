@@ -61,6 +61,11 @@ export interface StatsState {
       </div>
     </section>
   </div>
+
+  <!-- Refresh Button -->
+  <div class="stats-actions">
+    <button id="refresh-stats" class="stats-refresh-btn">Refresh Statistics</button>
+  </div>
 </div>
 
 <script>
@@ -111,10 +116,21 @@ export interface StatsState {
     private async init() {
       console.log('Initializing StatsController');
       await this.fetchStats();
+      this.setupEventListeners();
+    }
+
+    private setupEventListeners() {
+      const refreshBtn = document.getElementById('refresh-stats');
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+          this.refreshStats();
+        });
+      }
     }
 
     private async fetchStats() {
       console.log('Fetching stats from API...');
+      this.updateRefreshButton(true);
 
       try {
         this.setState({ loading: true, error: null });
@@ -151,6 +167,22 @@ export interface StatsState {
           error: error instanceof Error ? error.message : 'Failed to load statistics',
           data: null
         });
+      } finally {
+        this.updateRefreshButton(false);
+      }
+    }
+
+    private updateRefreshButton(loading: boolean) {
+      const refreshBtn = document.getElementById('refresh-stats') as HTMLButtonElement;
+      if (refreshBtn) {
+        refreshBtn.disabled = loading;
+        if (loading) {
+          refreshBtn.classList.add('loading');
+          refreshBtn.textContent = 'Refreshing';
+        } else {
+          refreshBtn.classList.remove('loading');
+          refreshBtn.textContent = 'Refresh Statistics';
+        }
       }
     }
 
@@ -169,7 +201,149 @@ export interface StatsState {
     private setState(newState: Partial<StatsState>) {
       this.state = { ...this.state, ...newState };
       console.log('State updated:', this.state);
-      // TODO: Update DOM based on state
+      this.updateDOM();
+    }
+
+    private updateDOM() {
+      if (this.state.loading) {
+        this.renderLoadingState();
+      } else if (this.state.error) {
+        this.renderErrorState(this.state.error);
+      } else if (this.state.data) {
+        this.renderData(this.state.data);
+      }
+    }
+
+    private renderLoadingState() {
+      // Loading state is handled by CSS - just ensure loading classes are present
+      const cards = this.container.querySelectorAll('.stats-card');
+      const lists = this.container.querySelectorAll('.stats-list');
+
+      cards.forEach(card => {
+        card.classList.add('loading');
+        const numberEl = card.querySelector('.stats-number');
+        if (numberEl) {
+          numberEl.classList.add('skeleton');
+          numberEl.textContent = '';
+        }
+      });
+
+      lists.forEach(list => {
+        list.classList.add('loading');
+        list.innerHTML = `
+          <div class="skeleton-item"></div>
+          <div class="skeleton-item"></div>
+          <div class="skeleton-item"></div>
+        `;
+      });
+    }
+
+    private renderErrorState(error: string) {
+      const cards = this.container.querySelectorAll('.stats-card');
+      const lists = this.container.querySelectorAll('.stats-list');
+
+      cards.forEach(card => {
+        card.classList.remove('loading');
+        const numberEl = card.querySelector('.stats-number');
+        if (numberEl) {
+          numberEl.classList.remove('skeleton');
+          numberEl.textContent = '—';
+        }
+      });
+
+      lists.forEach(list => {
+        list.classList.remove('loading');
+        list.innerHTML = `
+          <div class="error-message">
+            <p>${error}</p>
+            <button class="retry-btn" onclick="window.refreshStats?.()">Try Again</button>
+          </div>
+        `;
+      });
+    }
+
+    private renderData(data: StatsData) {
+      this.renderSummaryCards(data);
+      this.renderTopTags(data.top_tags);
+      this.renderMostViewed(data.most_viewed);
+    }
+
+    private renderSummaryCards(data: StatsData) {
+      const cards = this.container.querySelectorAll('.stats-card');
+      const values = [data.total_links, data.total_tags, data.total_views];
+
+      cards.forEach((card, index) => {
+        card.classList.remove('loading');
+        const numberEl = card.querySelector('.stats-number');
+        if (numberEl) {
+          numberEl.classList.remove('skeleton');
+          numberEl.textContent = this.formatNumber(values[index]);
+        }
+      });
+    }
+
+    private renderTopTags(tags: StatsData['top_tags']) {
+      const topTagsSection = this.container.querySelector('.stats-section h2');
+      if (!topTagsSection || topTagsSection.textContent !== 'Top Tags') return;
+
+      const listContainer = topTagsSection.parentElement?.querySelector('.stats-list');
+      if (!listContainer) return;
+
+      listContainer.classList.remove('loading');
+
+      if (tags.length === 0) {
+        listContainer.innerHTML = '<p class="empty-message">No tags found</p>';
+        return;
+      }
+
+      const listHTML = tags.map((tag, index) => `
+        <div class="ranked-item">
+          <span class="rank">${index + 1}</span>
+          <span class="name">${this.escapeHtml(tag.name)}</span>
+          <span class="count">${this.formatNumber(tag.link_count)} ${tag.link_count === 1 ? 'link' : 'links'}</span>
+        </div>
+      `).join('');
+
+      listContainer.innerHTML = `<div class="ranked-list">${listHTML}</div>`;
+    }
+
+    private renderMostViewed(links: StatsData['most_viewed']) {
+      const mostViewedSection = Array.from(this.container.querySelectorAll('.stats-section h2')).find(h2 => h2.textContent === 'Most Viewed');
+      if (!mostViewedSection) return;
+
+      const listContainer = mostViewedSection.parentElement?.querySelector('.stats-list');
+      if (!listContainer) return;
+
+      listContainer.classList.remove('loading');
+
+      if (links.length === 0) {
+        listContainer.innerHTML = '<p class="empty-message">No links found</p>';
+        return;
+      }
+
+      const listHTML = links.map((link, index) => `
+        <div class="ranked-item">
+          <span class="rank">${index + 1}</span>
+          <span class="name">
+            <a href="${this.escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">
+              ${this.escapeHtml(link.title)}
+            </a>
+          </span>
+          <span class="count">${this.formatNumber(link.view_count)} ${link.view_count === 1 ? 'view' : 'views'}</span>
+        </div>
+      `).join('');
+
+      listContainer.innerHTML = `<div class="ranked-list">${listHTML}</div>`;
+    }
+
+    private formatNumber(num: number): string {
+      return new Intl.NumberFormat().format(num);
+    }
+
+    private escapeHtml(text: string): string {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
     }
 
     public async refreshStats() {
@@ -319,5 +493,127 @@ export interface StatsState {
     .stats-summary-cards {
       grid-template-columns: repeat(2, 1fr);
     }
+  }
+
+  /* Ranked Lists */
+  .ranked-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+
+  .ranked-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm);
+    background-color: var(--color-bg);
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+
+  .ranked-item:hover {
+    background-color: var(--color-footer);
+  }
+
+  .ranked-item .rank {
+    font-weight: 600;
+    color: var(--color-primary);
+    min-width: 1.5rem;
+    text-align: center;
+  }
+
+  .ranked-item .name {
+    flex: 1;
+    font-weight: 500;
+  }
+
+  .ranked-item .name a {
+    color: var(--color-primary);
+    text-decoration: none;
+  }
+
+  .ranked-item .name a:hover {
+    text-decoration: underline;
+  }
+
+  .ranked-item .count {
+    font-size: 0.875rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    white-space: nowrap;
+  }
+
+  /* Error and Empty States */
+  .error-message {
+    text-align: center;
+    padding: var(--space-lg);
+  }
+
+  .error-message p {
+    color: var(--color-text);
+    margin-bottom: var(--space-md);
+    opacity: 0.8;
+  }
+
+  .empty-message {
+    text-align: center;
+    color: var(--color-text);
+    opacity: 0.8;
+    padding: var(--space-lg);
+    font-style: italic;
+  }
+
+  /* Refresh Button */
+  .stats-actions {
+    margin-top: var(--space-xl);
+    text-align: center;
+  }
+
+  .stats-refresh-btn,
+  .retry-btn {
+    background-color: var(--color-primary);
+    color: var(--color-bg);
+    border: none;
+    border-radius: 4px;
+    padding: var(--space-sm) var(--space-lg);
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: opacity 0.2s ease, transform 0.1s ease;
+  }
+
+  .stats-refresh-btn:hover,
+  .retry-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+
+  .stats-refresh-btn:active,
+  .retry-btn:active {
+    transform: translateY(0);
+  }
+
+  .stats-refresh-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* Loading indicator for button */
+  .stats-refresh-btn.loading {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .stats-refresh-btn.loading::after {
+    content: '...';
+    animation: dots 1.5s infinite;
+  }
+
+  @keyframes dots {
+    0%, 33% { content: '...'; }
+    66% { content: '..'; }
+    100% { content: '.'; }
   }
 </style>
