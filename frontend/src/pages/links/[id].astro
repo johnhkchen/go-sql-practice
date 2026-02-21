@@ -343,6 +343,45 @@ const pageTitle = link ? link.title : (error ? 'Error' : 'Loading...');
         // Silently fail - the page still works without view counting
         console.log('View count increment failed:', err);
       });
+
+      // Progressive enhancement: resolve tag IDs to names if needed
+      const tagElements = document.querySelectorAll('.tag-pill');
+      if (tagElements.length > 0) {
+        // Check if any tags look like IDs (15 character alphanumeric)
+        const tagIds = Array.from(tagElements).map(el => el.textContent).filter(tag =>
+          tag && tag.length === 15 && /^[a-zA-Z0-9]+$/.test(tag)
+        );
+
+        if (tagIds.length > 0) {
+          // Fetch tag details in parallel
+          const tagPromises = tagIds.map(tagId =>
+            fetch(`${API_BASE}/api/collections/tags/records/${tagId}`)
+              .then(response => response.ok ? response.json() : null)
+              .catch(() => null)
+          );
+
+          Promise.all(tagPromises).then(tagResults => {
+            const tagMap = new Map();
+            tagResults.forEach((tag, index) => {
+              if (tag && tag.slug) {
+                tagMap.set(tagIds[index], tag.slug);
+              }
+            });
+
+            // Update tag elements
+            tagElements.forEach(el => {
+              const tagId = el.textContent;
+              const tagSlug = tagMap.get(tagId);
+              if (tagSlug) {
+                el.textContent = tagSlug;
+                el.href = `/search?tag=${tagSlug}`;
+              }
+            });
+          }).catch(err => {
+            console.log('Tag resolution failed:', err);
+          });
+        }
+      }
     }
   }
 </script>
