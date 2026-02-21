@@ -14,6 +14,9 @@ func Register(app core.App) {
 		registerLinksSearch(e)
 		registerLinksSearchSimple(e)
 
+		// Register static file serving (must be last to catch all unmatched routes)
+		registerStatic(e)
+
 		// Continue middleware chain
 		return e.Next()
 	})
