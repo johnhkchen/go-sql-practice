@@ -1,0 +1,189 @@
+---
+// Component interfaces
+export interface StatsData {
+  total_links: number;
+  total_tags: number;
+  total_views: number;
+  top_tags: Array<{
+    name: string;
+    slug: string;
+    link_count: number;
+  }>;
+  most_viewed: Array<{
+    id: string;
+    title: string;
+    url: string;
+    view_count: number;
+  }>;
+}
+
+export interface StatsState {
+  loading: boolean;
+  error: string | null;
+  data: StatsData | null;
+}
+---
+
+<div id="stats-container">
+  <!-- Summary Cards Grid -->
+  <div class="stats-summary-cards">
+    <div class="stats-card loading">
+      <div class="stats-number skeleton"></div>
+      <div class="stats-label">Total Links</div>
+    </div>
+    <div class="stats-card loading">
+      <div class="stats-number skeleton"></div>
+      <div class="stats-label">Total Tags</div>
+    </div>
+    <div class="stats-card loading">
+      <div class="stats-number skeleton"></div>
+      <div class="stats-label">Total Views</div>
+    </div>
+  </div>
+
+  <!-- Stats Lists -->
+  <div class="stats-lists">
+    <section class="stats-section">
+      <h2>Top Tags</h2>
+      <div class="stats-list loading">
+        <div class="skeleton-item"></div>
+        <div class="skeleton-item"></div>
+        <div class="skeleton-item"></div>
+      </div>
+    </section>
+
+    <section class="stats-section">
+      <h2>Most Viewed</h2>
+      <div class="stats-list loading">
+        <div class="skeleton-item"></div>
+        <div class="skeleton-item"></div>
+        <div class="skeleton-item"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<style>
+  /* Stats Container */
+  #stats-container {
+    width: 100%;
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
+
+  /* Summary Cards Grid */
+  .stats-summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: var(--space-md);
+    margin-bottom: var(--space-xl);
+  }
+
+  .stats-card {
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: var(--space-lg);
+    text-align: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .stats-number {
+    font-size: 2.5rem;
+    font-weight: 600;
+    color: var(--color-primary);
+    display: block;
+    margin-bottom: var(--space-sm);
+  }
+
+  .stats-label {
+    font-size: 0.875rem;
+    color: var(--color-text);
+    opacity: 0.8;
+  }
+
+  /* Stats Lists Layout */
+  .stats-lists {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-xl);
+  }
+
+  .stats-section h2 {
+    color: var(--color-primary);
+    margin-bottom: var(--space-md);
+    font-size: 1.25rem;
+  }
+
+  .stats-list {
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: var(--space-lg);
+  }
+
+  /* Loading States */
+  .skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+    border-radius: 4px;
+    height: 2.5rem;
+    width: 60%;
+    margin: 0 auto;
+  }
+
+  .skeleton-item {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+    border-radius: 4px;
+    height: 1.5rem;
+    margin-bottom: var(--space-sm);
+  }
+
+  .skeleton-item:nth-child(1) { width: 80%; }
+  .skeleton-item:nth-child(2) { width: 65%; }
+  .skeleton-item:nth-child(3) { width: 75%; }
+
+  @keyframes loading {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  /* Responsive Design */
+  @media (max-width: 767px) {
+    .stats-summary-cards {
+      grid-template-columns: 1fr;
+      gap: var(--space-md);
+    }
+
+    .stats-lists {
+      grid-template-columns: 1fr;
+      gap: var(--space-lg);
+    }
+
+    .stats-card {
+      padding: var(--space-md);
+    }
+
+    .stats-number {
+      font-size: 2rem;
+    }
+  }
+
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .stats-summary-cards {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+</style>

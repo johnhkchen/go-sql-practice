@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import StatsSummary from '../components/StatsSummary.astro';
 
 const title = "Statistics Overview";
 const description = "View aggregate statistics for links, tags, and views in the bookmarks application.";
@@ -7,5 +8,5 @@ const description = "View aggregate statistics for links, tags, and views in the
 
 <BaseLayout title={title} description={description}>
   <h1>Statistics Overview</h1>
-  <p>Loading statistics...</p>
+  <StatsSummary />
 </BaseLayout>
