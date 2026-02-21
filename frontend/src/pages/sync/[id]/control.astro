@@ -1,0 +1,106 @@
+---
+// Disable prerendering for SSR
+export const prerender = false;
+
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+
+// Get session ID from URL parameters
+const { id } = Astro.params;
+
+// Get admin token from query string
+const token = Astro.url.searchParams.get('token');
+
+// Basic validation
+if (!id) {
+  return Astro.redirect('/404');
+}
+
+if (!token) {
+  // For now, just show an error message
+  // In next step, we'll implement proper error handling
+}
+
+const pageTitle = `Sync Control - ${id}`;
+---
+
+<BaseLayout title={pageTitle}>
+  <div class="sync-control-container">
+    <h1>Sync Control</h1>
+
+    {!token && (
+      <div class="error-message">
+        <p>Missing admin token. Please check your URL and try again.</p>
+        <a href="/" class="back-link">← Back to Home</a>
+      </div>
+    )}
+
+    {token && (
+      <div class="control-content">
+        <p>Session ID: <code>{id}</code></p>
+        <p>Token: <code>{token.slice(0, 8)}...</code></p>
+        <p>Basic route working! Next step: implement session data fetching.</p>
+      </div>
+    )}
+  </div>
+</BaseLayout>
+
+<style>
+  .sync-control-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--space-lg);
+  }
+
+  .error-message {
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: var(--space-lg);
+    text-align: center;
+  }
+
+  .error-message p {
+    color: #dc2626;
+    margin-bottom: var(--space-md);
+  }
+
+  .back-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+  }
+
+  .back-link:hover {
+    background-color: var(--color-footer);
+    text-decoration: none;
+  }
+
+  .control-content {
+    background-color: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: var(--space-lg);
+  }
+
+  .control-content p {
+    margin-bottom: var(--space-md);
+  }
+
+  .control-content code {
+    background-color: var(--color-footer);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.875rem;
+  }
+
+  .control-content p:last-child {
+    margin-bottom: 0;
+    font-style: italic;
+    opacity: 0.8;
+  }
+</style>
