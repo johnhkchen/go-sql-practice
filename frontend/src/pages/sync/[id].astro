@@ -1,0 +1,300 @@
+---
+export const prerender = false;
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect('/404');
+}
+
+const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
+const FETCH_TIMEOUT = 5000;
+
+let session = null;
+let error = null;
+
+try {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+  const response = await fetch(`${API_BASE}/api/collections/sync_sessions/records/${id}`, {
+    signal: controller.signal,
+    headers: {
+      'Accept': 'application/json'
+    }
+  });
+
+  clearTimeout(timeoutId);
+
+  if (response.ok) {
+    session = await response.json();
+  } else if (response.status === 404) {
+    error = 'session_not_found';
+  } else {
+    error = 'server_error';
+  }
+} catch (err) {
+  if (err.name === 'AbortError') {
+    error = 'timeout';
+  } else {
+    error = 'network_error';
+  }
+}
+
+const errorMessages = {
+  session_not_found: {
+    title: 'Session Not Found',
+    message: 'This sync session does not exist or has been removed.'
+  },
+  network_error: {
+    title: 'Connection Error',
+    message: 'Unable to connect to the server. Please check your connection and try again.'
+  },
+  server_error: {
+    title: 'Server Error',
+    message: 'Something went wrong on our end. Please try again later.'
+  },
+  timeout: {
+    title: 'Request Timeout',
+    message: 'The request took too long. Please try again.'
+  }
+};
+
+const pageTitle = session ? `Sync Viewer - Session ${id}` : (error ? 'Error' : 'Loading...');
+---
+
+<BaseLayout title={pageTitle}>
+  <div class="sync-viewer-container">
+    <h1>Sync Viewer</h1>
+
+    {error && (
+      <div class="error-container">
+        <h2 class="error-title">{errorMessages[error].title}</h2>
+        <p class="error-message">{errorMessages[error].message}</p>
+        <a href="/" class="back-link">← Back to Home</a>
+      </div>
+    )}
+
+    {session && (
+      <div class="session-container">
+        <div class="progress-section">
+          <h2 id="progress-heading">Session Progress</h2>
+          <div class="progress-container">
+            <progress
+              class="progress-bar"
+              id="progress-bar"
+              value={session.progress}
+              max="1"
+              aria-labelledby="progress-heading"
+              aria-describedby="progress-description">
+            </progress>
+            <div class="progress-label" id="progress-label">
+              {Math.round(session.progress * 100).toFixed(1)}%
+            </div>
+          </div>
+          <div id="progress-description" class="progress-help">
+            This progress bar updates automatically as the session advances
+          </div>
+        </div>
+
+        <div class="session-info">
+          <h2>Session Information</h2>
+          <div class="info-grid">
+            <div class="info-item">
+              <label>Session ID:</label>
+              <code>{session.id}</code>
+            </div>
+            <div class="info-item">
+              <label>Current Progress:</label>
+              <code>{session.progress.toFixed(3)}</code>
+            </div>
+            <div class="info-item">
+              <label>Created:</label>
+              <span>{new Date(session.created).toLocaleString()}</span>
+            </div>
+            <div class="info-item">
+              <label>Last Updated:</label>
+              <span>{new Date(session.updated).toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+</BaseLayout>
+
+<style>
+  .sync-viewer-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--space-lg);
+  }
+
+  .sync-viewer-container h1 {
+    margin-bottom: var(--space-lg);
+  }
+
+  /* Error States */
+  .error-container {
+    background-color: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: var(--space-lg);
+    text-align: center;
+  }
+
+  .error-title {
+    color: #dc2626;
+    margin-bottom: var(--space-md);
+    font-size: 1.5rem;
+  }
+
+  .error-message {
+    color: #dc2626;
+    margin-bottom: var(--space-lg);
+  }
+
+  .back-link {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+    display: inline-block;
+  }
+
+  .back-link:hover {
+    background-color: var(--color-footer);
+    text-decoration: none;
+  }
+
+  /* Session Content */
+  .session-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xl);
+  }
+
+  .progress-section,
+  .session-info {
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: var(--space-lg);
+  }
+
+  .progress-section h2,
+  .session-info h2 {
+    color: var(--color-primary);
+    margin-bottom: var(--space-md);
+    font-size: 1.25rem;
+  }
+
+  /* Progress Display */
+  .progress-container {
+    display: flex;
+    align-items: center;
+    gap: var(--space-lg);
+    margin-bottom: var(--space-md);
+  }
+
+  .progress-bar {
+    flex: 1;
+    height: 24px;
+    border-radius: 12px;
+    border: none;
+    background-color: var(--color-border);
+    transition: all 0.3s ease;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .progress-bar::-webkit-progress-bar {
+    background-color: var(--color-border);
+    border-radius: 12px;
+  }
+
+  .progress-bar::-webkit-progress-value {
+    background-color: var(--color-primary);
+    border-radius: 12px;
+    transition: width 0.3s ease;
+  }
+
+  .progress-bar::-moz-progress-bar {
+    background-color: var(--color-primary);
+    border-radius: 12px;
+  }
+
+  .progress-label {
+    min-width: 60px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--color-primary);
+  }
+
+  .progress-help {
+    font-size: 0.875rem;
+    color: var(--color-text);
+    opacity: 0.7;
+    font-style: italic;
+  }
+
+  /* Session Info Grid */
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--space-md);
+  }
+
+  .info-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+
+  .info-item label {
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--color-text);
+    opacity: 0.8;
+  }
+
+  .info-item code {
+    background-color: var(--color-footer);
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.875rem;
+    word-break: break-all;
+  }
+
+  /* Dark mode support */
+  @media (prefers-color-scheme: dark) {
+    .error-container {
+      background-color: #450a0a;
+      border-color: #7f1d1d;
+    }
+
+    .error-title,
+    .error-message {
+      color: #fca5a5;
+    }
+  }
+
+  /* Responsive Design */
+  @media (max-width: 767px) {
+    .sync-viewer-container {
+      padding: var(--space-md);
+    }
+
+    .info-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
