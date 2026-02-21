@@ -5,7 +5,7 @@ DIST_DIR := $(FRONTEND_DIR)/dist
 SERVER_PORT := 127.0.0.1:8090
 
 .DEFAULT_GOAL := help
-.PHONY: build frontend backend clean dev test help validate-build
+.PHONY: build frontend backend clean dev test help validate-build lint vet
 
 build: frontend backend validate-build
 
@@ -52,6 +52,26 @@ test:
 	else \
 		go test ./...; \
 	fi
+
+lint:
+	@echo "Checking code formatting..."
+	@if [ -n "$$(gofmt -l .)" ]; then \
+		echo "The following files need formatting:"; \
+		gofmt -l .; \
+		echo "Run: gofmt -w ."; \
+		exit 1; \
+	else \
+		echo "All files are properly formatted"; \
+	fi
+
+vet:
+	@echo "Running go vet..."
+	@if command -v flox >/dev/null 2>&1; then \
+		flox activate -- go vet ./...; \
+	else \
+		go vet ./...; \
+	fi
+	@echo "Go vet completed successfully"
 
 validate-build:
 	@echo "Validating build artifacts..."
