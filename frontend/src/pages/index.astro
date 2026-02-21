@@ -1,8 +1,342 @@
 ---
+// Disable prerendering for SSR
+export const prerender = false;
+
 import BaseLayout from '../layouts/BaseLayout.astro';
+import SearchInterface from '../components/SearchInterface.astro';
+import LinksList from '../components/LinksList.astro';
+import { type LinkItem } from '../components/LinkCard.astro';
+
+// URL parameter processing
+const searchQuery = Astro.url.searchParams.get('q') || '';
+const isSearchRequest = !!searchQuery;
+
+// API configuration
+const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
+const FETCH_TIMEOUT = 5000;
+
+// Response interfaces
+interface PocketBaseResponse {
+  page: number;
+  perPage: number;
+  totalItems: number;
+  totalPages: number;
+  items: LinkItem[];
+}
+
+interface SearchResponse {
+  links: LinkItem[];
+  page: number;
+  per_page: number;
+  total_count: number;
+  total_pages: number;
+}
+
+// Data fetching with error handling
+let links: LinkItem[] = [];
+let totalCount = 0;
+let error: string | null = null;
+
+try {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+  let response: Response;
+
+  if (isSearchRequest) {
+    // Use search API for queries
+    response = await fetch(`${API_BASE}/api/links/search?q=${encodeURIComponent(searchQuery)}`, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+  } else {
+    // Use PocketBase collections API for initial load
+    response = await fetch(`${API_BASE}/api/collections/links/records?page=1&perPage=50&sort=-created`, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+  }
+
+  clearTimeout(timeoutId);
+
+  if (response.ok) {
+    if (isSearchRequest) {
+      const searchData: SearchResponse = await response.json();
+      links = searchData.links || [];
+      totalCount = searchData.total_count || 0;
+    } else {
+      const pocketData: PocketBaseResponse = await response.json();
+      links = pocketData.items || [];
+      totalCount = pocketData.totalItems || 0;
+    }
+  } else if (response.status === 404) {
+    error = 'notfound';
+  } else {
+    error = 'server';
+  }
+} catch (err) {
+  if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
+    error = 'timeout';
+  } else {
+    error = 'network';
+    console.error('Fetch error:', err);
+  }
+}
+
+// Determine page title
+const pageTitle = error
+  ? 'Error - Link Bookmarks'
+  : isSearchRequest
+    ? `Search Results - Link Bookmarks`
+    : 'Link Bookmarks';
+
+// Error messages
+const errorMessages = {
+  notfound: {
+    title: 'No Results Found',
+    message: isSearchRequest
+      ? `No links match your search for "${searchQuery}".`
+      : 'No links are available at this time.'
+  },
+  network: {
+    title: 'Connection Error',
+    message: 'Unable to connect to the server. Please check your connection and try again.'
+  },
+  server: {
+    title: 'Server Error',
+    message: 'Something went wrong on our end. Please try again later.'
+  },
+  timeout: {
+    title: 'Request Timeout',
+    message: 'The request took too long. Please try again.'
+  }
+};
 ---
 
-<BaseLayout title="Link Bookmarks">
-  <h1>Link Bookmarks</h1>
-  <p>Welcome to the Link Bookmarks application.</p>
+<BaseLayout title={pageTitle}>
+  <main class="home-page-container">
+    <!-- Search Interface -->
+    <SearchInterface
+      initialQuery={searchQuery}
+      initialResults={isSearchRequest ? links : []}
+      initialCount={totalCount}
+      className="home-search-interface"
+    />
+
+    {/* Error State */}
+    {error && (
+      <div class="error-state">
+        <div class="error-icon">⚠️</div>
+        <h1 class="error-title">{errorMessages[error].title}</h1>
+        <p class="error-message">{errorMessages[error].message}</p>
+        <div class="error-actions">
+          <a href="/" class="back-link">← Home</a>
+          <button onclick="window.location.reload()" class="retry-button">Try Again</button>
+        </div>
+      </div>
+    )}
+
+    {/* Success State - Links List */}
+    {!error && (
+      <LinksList
+        links={links}
+        totalCount={totalCount}
+        searchQuery={searchQuery}
+        isSearchResult={isSearchRequest}
+        className="home-links-list"
+      />
+    )}
+  </main>
 </BaseLayout>
+
+<style>
+  /* Main container */
+  .home-page-container {
+    width: 100%;
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: var(--space-lg);
+    min-height: 60vh;
+  }
+
+  /* Search interface specific styling */
+  .home-search-interface {
+    position: sticky;
+    top: var(--space-md);
+    z-index: 10;
+    background-color: var(--color-bg);
+    border-radius: 8px;
+    padding: var(--space-lg);
+    margin-bottom: var(--space-xl);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: 1px solid var(--color-border);
+  }
+
+  /* Links list specific styling */
+  .home-links-list {
+    margin-top: 0;
+  }
+
+  /* Error state styles - matching tag page pattern */
+  .error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 50vh;
+  }
+
+  .error-icon {
+    font-size: 3rem;
+    margin-bottom: var(--space-lg);
+    opacity: 0.8;
+  }
+
+  .error-title {
+    font-size: 2rem;
+    margin-bottom: var(--space-md);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .error-message {
+    font-size: 1.125rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    margin-bottom: var(--space-xl);
+    max-width: 500px;
+    line-height: 1.6;
+  }
+
+  .error-actions {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .back-link,
+  .retry-button {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+    padding: var(--space-sm) var(--space-lg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background-color: transparent;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .back-link:hover,
+  .retry-button:hover {
+    background-color: var(--color-footer);
+    text-decoration: none;
+    border-color: var(--color-primary);
+  }
+
+  .retry-button:active {
+    transform: translateY(1px);
+  }
+
+  /* Responsive design */
+  @media (max-width: 767px) {
+    .home-page-container {
+      padding: var(--space-md);
+    }
+
+    .home-search-interface {
+      position: static;
+      padding: var(--space-md);
+      margin-bottom: var(--space-lg);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .error-title {
+      font-size: 1.5rem;
+    }
+
+    .error-message {
+      font-size: 1rem;
+    }
+
+    .error-actions {
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .back-link,
+    .retry-button {
+      width: 200px;
+      text-align: center;
+    }
+  }
+
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .home-search-interface {
+      padding: var(--space-md) var(--space-lg);
+    }
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .home-search-interface {
+      border-width: 2px;
+    }
+
+    .error-state {
+      border: 2px solid var(--color-border);
+      border-radius: 8px;
+    }
+
+    .back-link,
+    .retry-button {
+      border-width: 2px;
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .home-search-interface {
+      position: static;
+    }
+
+    .back-link,
+    .retry-button {
+      transition: none;
+    }
+
+    .retry-button:active {
+      transform: none;
+    }
+  }
+
+  /* Focus management */
+  .home-search-interface:focus-within {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  /* Loading state support (for future client-side enhancements) */
+  .home-page-container[data-loading="true"] {
+    opacity: 0.8;
+  }
+
+  .home-page-container[data-loading="true"] .home-search-interface {
+    pointer-events: none;
+  }
+</style>
+
+<script>
+  // Progressive enhancement preparation
+  console.log('Home page loaded');
+
+  // Track page view type for analytics (future enhancement)
+  if (typeof window !== 'undefined') {
+    const isSearch = new URLSearchParams(window.location.search).has('q');
+    console.log('Page type:', isSearch ? 'search' : 'browse');
+  }
+</script>
