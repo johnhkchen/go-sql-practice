@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -75,11 +76,13 @@ func handleSearchSimple(e *core.RequestEvent, app core.App) error {
 	`
 
 	var whereClauses []string
+	queryParams := make(map[string]interface{})
 
 	// Add text search condition if provided
 	if params.Q != "" {
 		searchPattern := escapeLikePattern2(params.Q)
-		whereClauses = append(whereClauses, fmt.Sprintf("(title LIKE '%s' OR description LIKE '%s')", searchPattern, searchPattern))
+		whereClauses = append(whereClauses, "(title LIKE {searchPattern} OR description LIKE {searchPattern})")
+		queryParams["searchPattern"] = searchPattern
 	}
 
 	// Add WHERE clause if conditions exist
@@ -88,10 +91,12 @@ func handleSearchSimple(e *core.RequestEvent, app core.App) error {
 	}
 
 	// Add ordering and pagination
-	query += fmt.Sprintf(" ORDER BY id DESC LIMIT %d OFFSET %d", params.PerPage, (params.Page-1)*params.PerPage)
+	query += " ORDER BY id DESC LIMIT {limit} OFFSET {offset}"
+	queryParams["limit"] = params.PerPage
+	queryParams["offset"] = (params.Page - 1) * params.PerPage
 
-	// Execute query
-	rows, err := db.NewQuery(query).Rows()
+	// Execute query with parameter binding to prevent SQL injection
+	rows, err := db.NewQuery(query).Bind(dbx.Params(queryParams)).Rows()
 	if err != nil {
 		return e.JSON(http.StatusInternalServerError, map[string]string{
 			"error": fmt.Sprintf("Query failed: %v", err),
@@ -176,11 +181,10 @@ func validateSearchParams2(params SearchParams2) error {
 
 // escapeLikePattern2 escapes special characters for SQL LIKE queries
 func escapeLikePattern2(pattern string) string {
-	// Escape special characters
+	// Escape LIKE wildcards (single quotes handled by parameter binding)
 	pattern = strings.ReplaceAll(pattern, "\\", "\\\\")
 	pattern = strings.ReplaceAll(pattern, "%", "\\%")
 	pattern = strings.ReplaceAll(pattern, "_", "\\_")
-	pattern = strings.ReplaceAll(pattern, "'", "''")
 
 	// Add wildcards for partial matching
 	return "%" + pattern + "%"

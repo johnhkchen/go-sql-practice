@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -178,8 +179,8 @@ func executeSearchQuery(app core.App, params SearchParams) ([]LinkItem, error) {
 		FROM links l
 	`
 
-	var args []interface{}
 	var whereClauses []string
+	queryParams := make(map[string]interface{})
 
 	// Add JOINs if tag filter is present
 	if params.Tag != "" {
@@ -187,15 +188,15 @@ func executeSearchQuery(app core.App, params SearchParams) ([]LinkItem, error) {
 			JOIN json_each(l.tags) AS jt ON 1=1
 			JOIN tags t ON t.id = jt.value
 		`
-		whereClauses = append(whereClauses, "t.slug = ?")
-		args = append(args, params.Tag)
+		whereClauses = append(whereClauses, "t.slug = {tagParam}")
+		queryParams["tagParam"] = params.Tag
 	}
 
 	// Add text search condition
 	if params.Q != "" {
 		searchPattern := escapeLikePattern(params.Q)
-		whereClauses = append(whereClauses, "(l.title LIKE ? OR l.description LIKE ?)")
-		args = append(args, searchPattern, searchPattern)
+		whereClauses = append(whereClauses, "(l.title LIKE {searchPattern} OR l.description LIKE {searchPattern})")
+		queryParams["searchPattern"] = searchPattern
 	}
 
 	// Add WHERE clause if conditions exist
@@ -204,24 +205,12 @@ func executeSearchQuery(app core.App, params SearchParams) ([]LinkItem, error) {
 	}
 
 	// Add ordering and pagination
-	query += " ORDER BY l.created DESC LIMIT ? OFFSET ?"
-	args = append(args, params.PerPage, (params.Page-1)*params.PerPage)
+	query += " ORDER BY l.created DESC LIMIT {limit} OFFSET {offset}"
+	queryParams["limit"] = params.PerPage
+	queryParams["offset"] = (params.Page - 1) * params.PerPage
 
-	// Execute query using string interpolation for parameters since dbx doesn't support varargs
-	finalQuery := query
-	for _, arg := range args {
-		argStr := fmt.Sprintf("%v", arg)
-		// For numeric values (int), don't add quotes
-		switch arg.(type) {
-		case int:
-			finalQuery = strings.Replace(finalQuery, "?", argStr, 1)
-		default:
-			// For strings, add quotes and escape single quotes
-			argStr = strings.ReplaceAll(argStr, "'", "''")
-			finalQuery = strings.Replace(finalQuery, "?", "'"+argStr+"'", 1)
-		}
-	}
-	rows, err := db.NewQuery(finalQuery).Rows()
+	// Execute query with parameter binding to prevent SQL injection
+	rows, err := db.NewQuery(query).Bind(dbx.Params(queryParams)).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -263,8 +252,8 @@ func executeCountQuery(app core.App, params SearchParams) (int, error) {
 		FROM links l
 	`
 
-	var args []interface{}
 	var whereClauses []string
+	queryParams := make(map[string]interface{})
 
 	// Add JOINs if tag filter is present
 	if params.Tag != "" {
@@ -272,15 +261,15 @@ func executeCountQuery(app core.App, params SearchParams) (int, error) {
 			JOIN json_each(l.tags) AS jt ON 1=1
 			JOIN tags t ON t.id = jt.value
 		`
-		whereClauses = append(whereClauses, "t.slug = ?")
-		args = append(args, params.Tag)
+		whereClauses = append(whereClauses, "t.slug = {tagParam}")
+		queryParams["tagParam"] = params.Tag
 	}
 
 	// Add text search condition
 	if params.Q != "" {
 		searchPattern := escapeLikePattern(params.Q)
-		whereClauses = append(whereClauses, "(l.title LIKE ? OR l.description LIKE ?)")
-		args = append(args, searchPattern, searchPattern)
+		whereClauses = append(whereClauses, "(l.title LIKE {searchPattern} OR l.description LIKE {searchPattern})")
+		queryParams["searchPattern"] = searchPattern
 	}
 
 	// Add WHERE clause if conditions exist
@@ -288,22 +277,9 @@ func executeCountQuery(app core.App, params SearchParams) (int, error) {
 		query += " WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
-	// Execute count query using string interpolation for parameters
+	// Execute count query with parameter binding to prevent SQL injection
 	var count int
-	finalQuery := query
-	for _, arg := range args {
-		argStr := fmt.Sprintf("%v", arg)
-		// For numeric values (int), don't add quotes
-		switch arg.(type) {
-		case int:
-			finalQuery = strings.Replace(finalQuery, "?", argStr, 1)
-		default:
-			// For strings, add quotes and escape single quotes
-			argStr = strings.ReplaceAll(argStr, "'", "''")
-			finalQuery = strings.Replace(finalQuery, "?", "'"+argStr+"'", 1)
-		}
-	}
-	err := db.NewQuery(finalQuery).Row(&count)
+	err := db.NewQuery(query).Bind(dbx.Params(queryParams)).Row(&count)
 
 	return count, err
 }
@@ -316,12 +292,13 @@ func fetchTagsForLinks(app core.App, linkIDs []string) (map[string][]string, err
 
 	db := app.DB()
 
-	// Build placeholders for IN clause
+	// Build named placeholders for IN clause
 	placeholders := make([]string, len(linkIDs))
-	args := make([]interface{}, len(linkIDs))
+	queryParams := make(map[string]interface{})
 	for i, id := range linkIDs {
-		placeholders[i] = "?"
-		args[i] = id
+		paramName := fmt.Sprintf("linkId%d", i)
+		placeholders[i] = "{" + paramName + "}"
+		queryParams[paramName] = id
 	}
 
 	query := fmt.Sprintf(`
@@ -333,21 +310,8 @@ func fetchTagsForLinks(app core.App, linkIDs []string) (map[string][]string, err
 		ORDER BY t.slug
 	`, strings.Join(placeholders, ","))
 
-	// Execute tag query using string interpolation for parameters
-	finalQuery := query
-	for _, arg := range args {
-		argStr := fmt.Sprintf("%v", arg)
-		// For numeric values (int), don't add quotes
-		switch arg.(type) {
-		case int:
-			finalQuery = strings.Replace(finalQuery, "?", argStr, 1)
-		default:
-			// For strings, add quotes and escape single quotes
-			argStr = strings.ReplaceAll(argStr, "'", "''")
-			finalQuery = strings.Replace(finalQuery, "?", "'"+argStr+"'", 1)
-		}
-	}
-	rows, err := db.NewQuery(finalQuery).Rows()
+	// Execute tag query with parameter binding to prevent SQL injection
+	rows, err := db.NewQuery(query).Bind(dbx.Params(queryParams)).Rows()
 	if err != nil {
 		return nil, err
 	}
