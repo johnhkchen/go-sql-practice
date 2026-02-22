@@ -25,6 +25,9 @@ const { title, description = "Link Bookmarks Application" } = Astro.props;
       --color-primary: #111111;
       --color-border: #e5e5e5;
       --color-footer: #f5f5f5;
+      --color-success: #10b981;
+      --color-error: #ef4444;
+      --color-secondary: #6b7280;
 
       /* Spacing */
       --space-xs: 0.25rem;
@@ -32,6 +35,10 @@ const { title, description = "Link Bookmarks Application" } = Astro.props;
       --space-md: 1rem;
       --space-lg: 2rem;
       --space-xl: 3rem;
+
+      /* Border radius */
+      --border-radius: 4px;
+      --border-radius-lg: 8px;
 
       /* Layout */
       --max-width: 1200px;
@@ -102,7 +109,7 @@ const { title, description = "Link Bookmarks Application" } = Astro.props;
   </main>
 
   <footer>
-    <p>&copy; 2024 Link Bookmarks. All rights reserved.</p>
+    <p>&copy; {new Date().getFullYear()} Link Bookmarks. All rights reserved.</p>
   </footer>
 
   <style>

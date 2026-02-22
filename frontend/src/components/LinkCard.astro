@@ -1,14 +1,6 @@
 ---
-// Component interfaces
-export interface LinkItem {
-  id: string;
-  title: string;
-  url: string;
-  description: string;
-  tags: string[];
-  created_at: string;
-  view_count: number;
-}
+// Import shared types
+import type { LinkItem } from '../types/api';
 
 export interface LinkCardProps {
   link: LinkItem;

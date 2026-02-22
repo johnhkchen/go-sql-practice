@@ -95,7 +95,7 @@ const { title, subtitle } = getResultsHeader();
 
   <!-- Links grid -->
   {hasLinks && (
-    <div class="links-grid" role="main" aria-label={`${totalCount} links displayed`}>
+    <div class="links-grid" aria-label={`${totalCount} links displayed`}>
       {links.map((link, index) => (
         <LinkCard
           link={link}

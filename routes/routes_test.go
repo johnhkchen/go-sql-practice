@@ -14,13 +14,6 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// TestData holds references to created test data
-type TestData struct {
-	LinkIDs  []string
-	TagIDs   []string
-	TagSlugs []string
-}
-
 // setupTestApp creates an in-memory PocketBase app for testing
 func setupTestApp(t *testing.T) (*pocketbase.PocketBase, func()) {
 	app := pocketbase.NewWithConfig(pocketbase.Config{
@@ -152,20 +145,6 @@ func parseJSONResponse(t *testing.T, resp *http.Response, target interface{}) {
 // ErrorResponse matches the common error format across all endpoints
 type ErrorResponse struct {
 	Error string `json:"error"`
-}
-
-// assertErrorResponse validates error responses consistently
-func assertErrorResponse(t *testing.T, resp *http.Response, expectedStatus int, expectedMessage string) {
-	if resp.StatusCode != expectedStatus {
-		t.Errorf("Expected status %d, got %d", expectedStatus, resp.StatusCode)
-	}
-
-	var errResp ErrorResponse
-	parseJSONResponse(t, resp, &errResp)
-
-	if errResp.Error != expectedMessage {
-		t.Errorf("Expected error message %q, got %q", expectedMessage, errResp.Error)
-	}
 }
 
 // BenchmarkMakeRequest benchmarks the request execution performance

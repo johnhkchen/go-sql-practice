@@ -5,32 +5,13 @@ export const prerender = false;
 import BaseLayout from '../layouts/BaseLayout.astro';
 import SearchInterface from '../components/SearchInterface.astro';
 import LinksList from '../components/LinksList.astro';
-import { type LinkItem } from '../components/LinkCard.astro';
+import ErrorState from '../components/ErrorState.astro';
+import { API_BASE, FETCH_TIMEOUT, apiFetch, ApiError } from '../lib/api';
+import type { LinkItem, SearchResponse, PocketBaseResponse } from '../types/api';
 
 // URL parameter processing
 const searchQuery = Astro.url.searchParams.get('q') || '';
 const isSearchRequest = !!searchQuery;
-
-// API configuration
-const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
-const FETCH_TIMEOUT = 5000;
-
-// Response interfaces
-interface PocketBaseResponse {
-  page: number;
-  perPage: number;
-  totalItems: number;
-  totalPages: number;
-  items: LinkItem[];
-}
-
-interface SearchResponse {
-  links: LinkItem[];
-  page: number;
-  per_page: number;
-  total_count: number;
-  total_pages: number;
-}
 
 // Data fetching with error handling
 let links: LinkItem[] = [];
@@ -38,45 +19,26 @@ let totalCount = 0;
 let error: string | null = null;
 
 try {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
-  let response: Response;
-
   if (isSearchRequest) {
     // Use search API for queries
-    response = await fetch(`${API_BASE}/api/links/search?q=${encodeURIComponent(searchQuery)}`, {
-      signal: controller.signal,
-      headers: { 'Accept': 'application/json' }
-    });
+    const searchData = await apiFetch<SearchResponse>(
+      `${API_BASE}/api/links/search?q=${encodeURIComponent(searchQuery)}`,
+      { timeout: FETCH_TIMEOUT }
+    );
+    links = searchData.links || [];
+    totalCount = searchData.total_count || 0;
   } else {
     // Use PocketBase collections API for initial load
-    response = await fetch(`${API_BASE}/api/collections/links/records?page=1&perPage=50&sort=-created`, {
-      signal: controller.signal,
-      headers: { 'Accept': 'application/json' }
-    });
-  }
-
-  clearTimeout(timeoutId);
-
-  if (response.ok) {
-    if (isSearchRequest) {
-      const searchData: SearchResponse = await response.json();
-      links = searchData.links || [];
-      totalCount = searchData.total_count || 0;
-    } else {
-      const pocketData: PocketBaseResponse = await response.json();
-      links = pocketData.items || [];
-      totalCount = pocketData.totalItems || 0;
-    }
-  } else if (response.status === 404) {
-    error = 'notfound';
-  } else {
-    error = 'server';
+    const pocketData = await apiFetch<PocketBaseResponse<LinkItem>>(
+      `${API_BASE}/api/collections/links/records?page=1&perPage=50&sort=-created`,
+      { timeout: FETCH_TIMEOUT }
+    );
+    links = pocketData.items || [];
+    totalCount = pocketData.totalItems || 0;
   }
 } catch (err) {
-  if (err && typeof err === 'object' && 'name' in err && err.name === 'AbortError') {
-    error = 'timeout';
+  if (err instanceof ApiError) {
+    error = err.code;
   } else {
     error = 'network';
     console.error('Fetch error:', err);
@@ -114,7 +76,7 @@ const errorMessages = {
 ---
 
 <BaseLayout title={pageTitle}>
-  <main class="home-page-container">
+  <div class="home-page-container">
     <!-- Search Interface -->
     <SearchInterface
       client:visible
@@ -126,15 +88,12 @@ const errorMessages = {
 
     {/* Error State */}
     {error && (
-      <div class="error-state">
-        <div class="error-icon">⚠️</div>
-        <h1 class="error-title">{errorMessages[error].title}</h1>
-        <p class="error-message">{errorMessages[error].message}</p>
-        <div class="error-actions">
-          <a href="/" class="back-link">← Home</a>
-          <button onclick="window.location.reload()" class="retry-button">Try Again</button>
-        </div>
-      </div>
+      <ErrorState
+        title={errorMessages[error].title}
+        message={errorMessages[error].message}
+        backLink="/"
+        backLabel="← Home"
+      />
     )}
 
     {/* Success State - Links List */}
@@ -147,7 +106,7 @@ const errorMessages = {
         className="home-links-list"
       />
     )}
-  </main>
+  </div>
 </BaseLayout>
 
 <style>
@@ -178,70 +137,6 @@ const errorMessages = {
     margin-top: 0;
   }
 
-  /* Error state styles - matching tag page pattern */
-  .error-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    min-height: 50vh;
-  }
-
-  .error-icon {
-    font-size: 3rem;
-    margin-bottom: var(--space-lg);
-    opacity: 0.8;
-  }
-
-  .error-title {
-    font-size: 2rem;
-    margin-bottom: var(--space-md);
-    color: var(--color-primary);
-    font-weight: 600;
-  }
-
-  .error-message {
-    font-size: 1.125rem;
-    color: var(--color-text);
-    opacity: 0.8;
-    margin-bottom: var(--space-xl);
-    max-width: 500px;
-    line-height: 1.6;
-  }
-
-  .error-actions {
-    display: flex;
-    gap: var(--space-md);
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
-  .back-link,
-  .retry-button {
-    color: var(--color-primary);
-    text-decoration: none;
-    font-weight: 500;
-    padding: var(--space-sm) var(--space-lg);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    background-color: transparent;
-    font-family: var(--font-body);
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-
-  .back-link:hover,
-  .retry-button:hover {
-    background-color: var(--color-footer);
-    text-decoration: none;
-    border-color: var(--color-primary);
-  }
-
-  .retry-button:active {
-    transform: translateY(1px);
-  }
 
   /* Responsive design */
   @media (max-width: 767px) {
@@ -333,11 +228,9 @@ const errorMessages = {
 
 <script>
   // Progressive enhancement preparation
-  console.log('Home page loaded');
 
   // Track page view type for analytics (future enhancement)
   if (typeof window !== 'undefined') {
     const isSearch = new URLSearchParams(window.location.search).has('q');
-    console.log('Page type:', isSearch ? 'search' : 'browse');
   }
 </script>

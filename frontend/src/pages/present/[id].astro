@@ -4,6 +4,7 @@ export const prerender = false;
 
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PresenterController from '../../components/PresenterController.astro';
+import { API_BASE, FETCH_TIMEOUT_LONG, apiFetch, ApiError } from '../../lib/api';
 
 // Get session ID from URL parameters
 const { id } = Astro.params;
@@ -16,9 +17,7 @@ if (!id) {
   return Astro.redirect('/404');
 }
 
-// API configuration
-const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
-const FETCH_TIMEOUT = 10000; // Longer timeout for complex operations
+const FETCH_TIMEOUT = FETCH_TIMEOUT_LONG; // Use longer timeout for complex operations
 
 // Session data and error state
 let session = null;
@@ -26,23 +25,15 @@ let presentation = null;
 let error = null;
 
 try {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
   // First, fetch session data
-  const sessionResponse = await fetch(`${API_BASE}/api/collections/sync_sessions/records/${id}`, {
-    signal: controller.signal,
+  const sessionData = await apiFetch(`${API_BASE}/api/collections/sync_sessions/records/${id}`, {
     headers: {
       'Accept': 'application/json',
       'Authorization': Astro.request.headers.get('Authorization') || '',
       'Cookie': Astro.request.headers.get('Cookie') || ''
-    }
+    },
+    timeout: FETCH_TIMEOUT
   });
-
-  clearTimeout(timeoutId);
-
-  if (sessionResponse.ok) {
-    const sessionData = await sessionResponse.json();
 
     // If token provided, validate it
     if (token) {
@@ -61,48 +52,36 @@ try {
     // If we have a valid session, fetch the associated presentation
     if (session && session.presentation_id) {
       try {
-        const presentationController = new AbortController();
-        const presentationTimeoutId = setTimeout(() => presentationController.abort(), FETCH_TIMEOUT);
-
-        const presentationResponse = await fetch(
+        presentation = await apiFetch(
           `${API_BASE}/api/collections/presentations/records/${session.presentation_id}`,
           {
-            signal: presentationController.signal,
             headers: {
               'Accept': 'application/json',
               'Authorization': Astro.request.headers.get('Authorization') || '',
               'Cookie': Astro.request.headers.get('Cookie') || ''
-            }
+            },
+            timeout: FETCH_TIMEOUT
           }
         );
-
-        clearTimeout(presentationTimeoutId);
-
-        if (presentationResponse.ok) {
-          presentation = await presentationResponse.json();
-        } else {
-          console.warn('Could not fetch presentation data:', presentationResponse.status);
-          // Continue without presentation data - we can still control the session
-        }
       } catch (presentationError) {
         console.warn('Error fetching presentation data:', presentationError);
         // Continue without presentation data - we can still control the session
       }
     }
 
-  } else if (sessionResponse.status === 404) {
-    error = 'session_not_found';
-  } else if (sessionResponse.status === 401) {
-    error = 'authentication_required';
-  } else if (sessionResponse.status === 403) {
-    error = 'access_denied';
-  } else {
-    error = 'server_error';
-  }
-
 } catch (fetchError) {
-  if (fetchError && typeof fetchError === 'object' && 'name' in fetchError && fetchError.name === 'AbortError') {
-    error = 'timeout';
+  if (fetchError instanceof ApiError) {
+    if (fetchError.code === 'timeout') {
+      error = 'timeout';
+    } else if (fetchError.code === 'notfound' || fetchError.status === 404) {
+      error = 'session_not_found';
+    } else if (fetchError.status === 401) {
+      error = 'authentication_required';
+    } else if (fetchError.status === 403) {
+      error = 'access_denied';
+    } else {
+      error = 'server_error';
+    }
   } else {
     error = 'network_error';
     console.error('Network error:', fetchError);
@@ -199,7 +178,7 @@ const description = session ? `Control your live presentation: ${presentationDat
 ---
 
 <BaseLayout title={pageTitle} description={description}>
-  <main class="presenter-control-page">
+  <div class="presenter-control-page">
     <div class="control-container">
       {error ? (
         <div class="error-container">
@@ -263,21 +242,17 @@ const description = session ? `Control your live presentation: ${presentationDat
         </div>
       )}
     </div>
-  </main>
+  </div>
 
   {session && presentationData && (
-    <script client:load define:vars={{
-      presenterSessionId: id,
-      presenterAdminToken: token || '',
-      presenterData: presentationData,
-      PUBLIC_API_URL: API_BASE
-    }}>
-      // Make variables available globally for PresenterController
-      window.presenterSessionId = presenterSessionId;
-      window.presenterAdminToken = presenterAdminToken;
-      window.presenterData = presenterData;
-      window.PUBLIC_API_URL = PUBLIC_API_URL;
-    </script>
+    <div
+      id="presenter-data-container"
+      data-session-id={id}
+      data-admin-token={token || ''}
+      data-presentation-data={JSON.stringify(presentationData)}
+      data-api-base={API_BASE}
+      style="display: none;"
+    ></div>
   )}
 </BaseLayout>
 

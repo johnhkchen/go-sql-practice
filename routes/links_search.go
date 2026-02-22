@@ -89,6 +89,7 @@ func handleSearch(e *core.RequestEvent, app core.App) error {
 		tagMap, err := fetchTagsForLinks(app, linkIDs)
 		if err != nil {
 			// Log error but don't fail the request
+			app.Logger().Error("Failed to fetch tags", "error", err)
 			// Links will be returned without tags
 			tagMap = make(map[string][]string)
 		}

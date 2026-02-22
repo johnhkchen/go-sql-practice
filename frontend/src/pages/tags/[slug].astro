@@ -4,6 +4,9 @@ export const prerender = false;
 
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import LinkCard from '../../components/LinkCard.astro';
+import ErrorState from '../../components/ErrorState.astro';
+import { API_BASE, FETCH_TIMEOUT, apiFetch, ApiError } from '../../lib/api';
+import type { LinkItem, SearchResponse } from '../../types/api';
 
 // Get tag slug from URL
 const { slug } = Astro.params;
@@ -12,56 +15,17 @@ if (!slug) {
   return Astro.redirect('/404');
 }
 
-// API configuration
-const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
-const FETCH_TIMEOUT = 5000;
-
-// Search API response interfaces
-interface LinkItem {
-  id: string;
-  title: string;
-  url: string;
-  description: string;
-  tags: string[];
-  created_at: string;
-  view_count: number;
-}
-
-interface SearchResponse {
-  links: LinkItem[];
-  page: number;
-  per_page: number;
-  total_count: number;
-  total_pages: number;
-}
-
 let searchResponse: SearchResponse | null = null;
 let error: string | null = null;
 
 try {
-  // Fetch tag data with timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
-  const response = await fetch(`${API_BASE}/api/links/search?tag=${encodeURIComponent(slug)}&page=1&per_page=50`, {
-    signal: controller.signal,
-    headers: {
-      'Accept': 'application/json'
-    }
-  });
-
-  clearTimeout(timeoutId);
-
-  if (response.ok) {
-    searchResponse = await response.json();
-  } else if (response.status === 404) {
-    error = 'notfound';
-  } else {
-    error = 'server';
-  }
+  searchResponse = await apiFetch<SearchResponse>(
+    `${API_BASE}/api/links/search?tag=${encodeURIComponent(slug)}&page=1&per_page=50`,
+    { timeout: FETCH_TIMEOUT }
+  );
 } catch (err) {
-  if (err.name === 'AbortError') {
-    error = 'timeout';
+  if (err instanceof ApiError) {
+    error = err.code;
   } else {
     error = 'network';
   }
@@ -97,18 +61,15 @@ const pageTitle = error ? 'Error' : hasLinks ? `${tagDisplayName} Links` : isEmp
 ---
 
 <BaseLayout title={pageTitle}>
-  <main class="tag-page-container">
+  <div class="tag-page-container">
     {/* Error State */}
     {error && (
-      <div class="error-state">
-        <div class="error-icon">⚠️</div>
-        <h1 class="error-title">{errorMessages[error].title}</h1>
-        <p class="error-message">{errorMessages[error].message}</p>
-        <div class="error-actions">
-          <a href="/" class="back-link">← Back to Home</a>
-          <button onclick="window.location.reload()" class="retry-button">Try Again</button>
-        </div>
-      </div>
+      <ErrorState
+        title={errorMessages[error].title}
+        message={errorMessages[error].message}
+        backLink="/"
+        backLabel="← Back to Home"
+      />
     )}
 
     {/* Empty State */}
@@ -152,7 +113,7 @@ const pageTitle = error ? 'Error' : hasLinks ? `${tagDisplayName} Links` : isEmp
         )}
       </div>
     )}
-  </main>
+  </div>
 </BaseLayout>
 
 <style>
@@ -346,20 +307,6 @@ const pageTitle = error ? 'Error' : hasLinks ? `${tagDisplayName} Links` : isEmp
     }
   }
 
-  /* Loading state (for progressive enhancement) */
-  .loading-skeleton {
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-    background-size: 200% 100%;
-    animation: loading 1.5s infinite;
-    border-radius: 8px;
-    height: 200px;
-    margin-bottom: var(--space-md);
-  }
-
-  @keyframes loading {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
 
   /* High contrast mode support */
   @media (prefers-contrast: high) {
@@ -377,11 +324,6 @@ const pageTitle = error ? 'Error' : hasLinks ? `${tagDisplayName} Links` : isEmp
 
   /* Reduced motion support */
   @media (prefers-reduced-motion: reduce) {
-    .loading-skeleton {
-      animation: none;
-      background: #f0f0f0;
-    }
-
     .back-link,
     .retry-button {
       transition: none;
@@ -391,11 +333,9 @@ const pageTitle = error ? 'Error' : hasLinks ? `${tagDisplayName} Links` : isEmp
 
 <script>
   // Progressive enhancement: Add search refinement (future enhancement)
-  console.log('Tag page loaded for:', document.title);
 
   // Track page view for analytics (future enhancement)
   if (typeof window !== 'undefined') {
     const tagSlug = window.location.pathname.split('/')[2];
-    console.log('Viewing tag:', tagSlug);
   }
 </script>

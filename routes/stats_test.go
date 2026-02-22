@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
 

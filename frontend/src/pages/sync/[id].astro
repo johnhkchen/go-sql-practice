@@ -2,6 +2,7 @@
 export const prerender = false;
 
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { API_BASE, FETCH_TIMEOUT, apiFetch, ApiError } from '../../lib/api';
 
 const { id } = Astro.params;
 
@@ -9,35 +10,25 @@ if (!id) {
   return Astro.redirect('/404');
 }
 
-const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
-const FETCH_TIMEOUT = 5000;
-
 let session = null;
 let error = null;
 
 try {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
-  const response = await fetch(`${API_BASE}/api/collections/sync_sessions/records/${id}`, {
-    signal: controller.signal,
+  session = await apiFetch(`${API_BASE}/api/collections/sync_sessions/records/${id}`, {
     headers: {
       'Accept': 'application/json'
-    }
+    },
+    timeout: FETCH_TIMEOUT
   });
-
-  clearTimeout(timeoutId);
-
-  if (response.ok) {
-    session = await response.json();
-  } else if (response.status === 404) {
-    error = 'session_not_found';
-  } else {
-    error = 'server_error';
-  }
 } catch (err) {
-  if (err.name === 'AbortError') {
-    error = 'timeout';
+  if (err instanceof ApiError) {
+    if (err.code === 'timeout') {
+      error = 'timeout';
+    } else if (err.code === 'notfound' || err.status === 404) {
+      error = 'session_not_found';
+    } else {
+      error = 'server_error';
+    }
   } else {
     error = 'network_error';
   }
@@ -132,164 +123,11 @@ const pageTitle = session ? `Sync Viewer - Session ${id}` : (error ? 'Error' : '
 </BaseLayout>
 
 {session && (
-  <script client:load define:vars={{ sessionId: id, initialProgress: session.progress, apiBase: API_BASE }}>
-    class SyncViewer {
-      constructor(sessionId, initialProgress, apiBase) {
-        this.sessionId = sessionId;
-        this.initialProgress = initialProgress;
-        this.apiBase = apiBase;
-        this.currentProgress = initialProgress;
+  <script define:vars={{ sessionId: id, initialProgress: session.progress }}>
+    import { SyncViewer } from '../../lib/syncViewer';
 
-        // Connection state
-        this.connectionStatus = 'disconnected';
-        this.eventSource = null;
-        this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 5;
-
-        // DOM elements (will be set in init)
-        this.statusIndicator = null;
-        this.statusText = null;
-        this.lastUpdate = null;
-        this.progressBar = null;
-        this.progressLabel = null;
-
-        // Initialize when DOM is ready
-        this.init();
-      }
-
-      init() {
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', () => this.setupDOM());
-        } else {
-          this.setupDOM();
-        }
-      }
-
-      setupDOM() {
-        // Get DOM elements
-        this.statusIndicator = document.getElementById('status-indicator');
-        this.statusText = document.getElementById('status-text');
-        this.lastUpdate = document.getElementById('last-update');
-        this.progressBar = document.getElementById('progress-bar');
-        this.progressLabel = document.getElementById('progress-label');
-
-        if (!this.statusIndicator || !this.statusText || !this.progressBar) {
-          console.warn('SyncViewer: Required DOM elements not found');
-          return;
-        }
-
-        // Set initial state
-        this.updateConnectionStatus('connecting');
-        this.updateLastUpdate('Initializing...');
-
-        // Start SSE connection
-        this.connect();
-
-        console.log('SyncViewer initialized for session:', this.sessionId);
-      }
-
-      updateConnectionStatus(status) {
-        if (!this.statusIndicator || !this.statusText) return;
-
-        this.connectionStatus = status;
-
-        // Remove all status classes
-        this.statusIndicator.classList.remove('connected', 'connecting', 'disconnected');
-
-        // Add current status class
-        this.statusIndicator.classList.add(status);
-
-        // Update text
-        switch (status) {
-          case 'connected':
-            this.statusText.textContent = 'Connected';
-            break;
-          case 'connecting':
-            this.statusText.textContent = 'Connecting...';
-            break;
-          case 'disconnected':
-            this.statusText.textContent = 'Disconnected';
-            break;
-          default:
-            this.statusText.textContent = 'Unknown';
-        }
-
-        console.log('Connection status updated:', status);
-      }
-
-      updateLastUpdate(text) {
-        if (this.lastUpdate) {
-          this.lastUpdate.textContent = text;
-        }
-      }
-
-      updateProgress(progress) {
-        if (!this.progressBar || !this.progressLabel) return;
-
-        this.currentProgress = progress;
-        this.progressBar.value = progress;
-        this.progressLabel.textContent = (progress * 100).toFixed(1) + '%';
-
-        this.updateLastUpdate(`Updated ${new Date().toLocaleTimeString()}`);
-      }
-
-      connect() {
-        try {
-          // Close existing connection if any
-          if (this.eventSource) {
-            this.eventSource.close();
-          }
-
-          // Create new EventSource connection
-          this.eventSource = new EventSource(`${this.apiBase}/api/realtime`);
-
-          // Set up event handlers
-          this.eventSource.onopen = () => this.handleConnect();
-          this.eventSource.onmessage = (event) => this.handleMessage(event);
-          this.eventSource.onerror = () => this.handleError();
-
-          console.log('SSE connection established to:', `${this.apiBase}/api/realtime`);
-        } catch (error) {
-          console.error('Failed to create SSE connection:', error);
-          this.handleError();
-        }
-      }
-
-      handleConnect() {
-        console.log('SSE connection opened');
-        this.updateConnectionStatus('connected');
-        this.updateLastUpdate('Connected');
-        this.reconnectAttempts = 0; // Reset reconnect counter
-      }
-
-      handleMessage(event) {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('SSE message received:', data);
-
-          // Filter for sync_sessions collection updates to our session
-          if (data.collection === 'sync_sessions' &&
-              data.action === 'update' &&
-              data.record &&
-              data.record.id === this.sessionId) {
-
-            console.log('Progress update received:', data.record.progress);
-            this.updateProgress(data.record.progress);
-          }
-        } catch (error) {
-          console.warn('Invalid SSE message:', error);
-        }
-      }
-
-      handleError() {
-        console.log('SSE connection error or closed');
-        this.updateConnectionStatus('disconnected');
-        this.updateLastUpdate('Connection lost');
-      }
-    }
-
-    // Initialize the sync viewer
-    window.syncViewer = new SyncViewer(sessionId, initialProgress, apiBase);
+    const apiBase = import.meta.env.PUBLIC_API_URL || '';
+    const syncViewer = new SyncViewer(sessionId, initialProgress, apiBase);
   </script>
 )}
 

@@ -91,5 +91,7 @@ help:
 	@echo "  clean       - Remove all build artifacts"
 	@echo "  dev         - Start development server"
 	@echo "  test        - Run Go tests"
+	@echo "  lint        - Check Go code formatting"
+	@echo "  vet         - Run Go static analysis"
 	@echo "  validate-build - Validate build artifacts"
 	@echo "  help        - Show this help message"

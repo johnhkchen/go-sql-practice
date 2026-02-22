@@ -3,6 +3,8 @@
 export const prerender = false;
 
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { API_BASE, FETCH_TIMEOUT, apiFetch, ApiError } from '../../lib/api';
+import type { LinkItem } from '../../types/api';
 
 // Get link ID from URL
 const { id } = Astro.params;
@@ -11,49 +13,17 @@ if (!id) {
   return Astro.redirect('/404');
 }
 
-// API configuration
-const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
-const FETCH_TIMEOUT = 5000;
-
-// Type definitions
-interface LinkItem {
-  id: string;
-  url: string;
-  title: string;
-  description: string;
-  view_count: number;
-  tags: string[];
-  created: string;
-  updated: string;
-}
-
 let link: LinkItem | null = null;
 let error: string | null = null;
 
 try {
-  // Fetch link data with timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
-  const response = await fetch(`${API_BASE}/api/collections/links/records/${id}`, {
-    signal: controller.signal,
-    headers: {
-      'Accept': 'application/json'
-    }
-  });
-
-  clearTimeout(timeoutId);
-
-  if (response.ok) {
-    link = await response.json();
-  } else if (response.status === 404) {
-    error = 'notfound';
-  } else {
-    error = 'server';
-  }
+  link = await apiFetch<LinkItem>(
+    `${API_BASE}/api/collections/links/records/${id}`,
+    { timeout: FETCH_TIMEOUT }
+  );
 } catch (err) {
-  if (err.name === 'AbortError') {
-    error = 'timeout';
+  if (err instanceof ApiError) {
+    error = err.code;
   } else {
     error = 'network';
   }
@@ -111,7 +81,7 @@ const pageTitle = link ? link.title : (error ? 'Error' : 'Loading...');
             <span class="tags-label">Tags:</span>
             <div class="tags-list">
               {link.tags.map(tag => (
-                <a href={`/search?tag=${tag}`} class="tag-pill">
+                <a href={`/tags/${encodeURIComponent(tag)}`} class="tag-pill">
                   {tag}
                 </a>
               ))}
@@ -308,7 +278,7 @@ const pageTitle = link ? link.title : (error ? 'Error' : 'Loading...');
   // Progressive enhancement: increment view count on page load
   if (typeof window !== 'undefined') {
     const linkId = window.location.pathname.split('/')[2];
-    const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
+    const API_BASE = (import.meta.env?.PUBLIC_API_URL) || 'http://localhost:8090';
 
     // Only increment view count if we successfully loaded a link (not on error pages)
     if (document.querySelector('.link-container')) {
@@ -341,7 +311,6 @@ const pageTitle = link ? link.title : (error ? 'Error' : 'Loading...');
       })
       .catch(err => {
         // Silently fail - the page still works without view counting
-        console.log('View count increment failed:', err);
       });
 
       // Progressive enhancement: resolve tag IDs to names if needed
@@ -374,11 +343,11 @@ const pageTitle = link ? link.title : (error ? 'Error' : 'Loading...');
               const tagSlug = tagMap.get(tagId);
               if (tagSlug) {
                 el.textContent = tagSlug;
-                el.href = `/search?tag=${tagSlug}`;
+                el.href = `/tags/${encodeURIComponent(tagSlug)}`;
               }
             });
           }).catch(err => {
-            console.log('Tag resolution failed:', err);
+            // Silently fail - tags still work with basic display
           });
         }
       }

@@ -3,6 +3,7 @@
 export const prerender = false;
 
 import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { API_BASE, FETCH_TIMEOUT, apiFetch, ApiError } from '../../../lib/api';
 
 // Get session ID from URL parameters
 const { id } = Astro.params;
@@ -15,34 +16,22 @@ if (!id) {
   return Astro.redirect('/404');
 }
 
-if (!token) {
-  error = 'missing_token';
-}
-
-// API configuration
-const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
-const FETCH_TIMEOUT = 5000;
-
 // Session data and error state
 let session = null;
 let error = null;
 
+if (!token) {
+  error = 'missing_token';
+}
+
 try {
   // Fetch session data with timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
-  const response = await fetch(`${API_BASE}/api/collections/sync_sessions/records/${id}`, {
-    signal: controller.signal,
+  const sessionData = await apiFetch(`${API_BASE}/api/collections/sync_sessions/records/${id}`, {
     headers: {
       'Accept': 'application/json'
-    }
+    },
+    timeout: FETCH_TIMEOUT
   });
-
-  clearTimeout(timeoutId);
-
-  if (response.ok) {
-    const sessionData = await response.json();
 
     // Validate admin token (constant-time comparison would be ideal, but this is frontend)
     if (sessionData.admin_token === token) {
@@ -50,14 +39,15 @@ try {
     } else {
       error = 'invalid_token';
     }
-  } else if (response.status === 404) {
-    error = 'session_not_found';
-  } else {
-    error = 'server_error';
-  }
 } catch (err) {
-  if (err.name === 'AbortError') {
-    error = 'timeout';
+  if (err instanceof ApiError) {
+    if (err.code === 'timeout') {
+      error = 'timeout';
+    } else if (err.code === 'notfound' || err.status === 404) {
+      error = 'session_not_found';
+    } else {
+      error = 'server_error';
+    }
   } else {
     error = 'network_error';
   }
@@ -200,8 +190,9 @@ const viewerUrl = `/sync/${id}`;
 </BaseLayout>
 
 {session && (
-  <script client:load define:vars={{ sessionId: id, adminToken: token, initialProgress: session.progress, apiBase: API_BASE }}>
-    class SyncController {
+  <script client:load type="module" define:vars={{ sessionId: id, adminToken: token, initialProgress: session.progress, apiBase: API_BASE }}>
+    // Import and use SyncController from extracted module
+    import { SyncController } from '../../../lib/syncController.js';
       constructor(sessionId, adminToken, initialProgress, apiBase) {
         this.sessionId = sessionId;
         this.adminToken = adminToken;
@@ -247,7 +238,6 @@ const viewerUrl = `/sync/${id}`;
         // Set up event listeners
         this.setupEventListeners();
 
-        console.log('SyncController initialized successfully');
       }
 
       setupEventListeners() {
@@ -279,7 +269,6 @@ const viewerUrl = `/sync/${id}`;
           this.viewerUrlInput.select();
         });
 
-        console.log('Event listeners set up');
       }
 
       handleSliderKeyboard(e) {
@@ -404,7 +393,6 @@ const viewerUrl = `/sync/${id}`;
       async sendProgressUpdate(value) {
         // Prevent concurrent updates
         if (this.isUpdating) {
-          console.log('Update already in progress, skipping');
           return;
         }
 
@@ -428,7 +416,6 @@ const viewerUrl = `/sync/${id}`;
 
           if (response.ok) {
             const result = await response.json();
-            console.log('Progress updated successfully:', result);
             this.addUpdateFeedback('success');
 
             // Update local state with server response if provided
@@ -526,7 +513,6 @@ const viewerUrl = `/sync/${id}`;
             await navigator.clipboard.writeText(viewerUrl);
             this.showCopyFeedback('success');
             this.announceCopySuccess();
-            console.log('URL copied using modern Clipboard API');
           } else {
             // Fallback to legacy method
             this.copyWithLegacyMethod(viewerUrl);
@@ -565,7 +551,6 @@ const viewerUrl = `/sync/${id}`;
           if (successful) {
             this.showCopyFeedback('success');
             this.announceCopySuccess();
-            console.log('URL copied using legacy method');
           } else {
             throw new Error('execCommand copy failed');
           }
@@ -869,10 +854,10 @@ const viewerUrl = `/sync/${id}`;
     }
 
     // Initialize controller when script loads
-    window.syncController = new SyncController(sessionId, adminToken, initialProgress, apiBase);
+    const syncController = new SyncController(sessionId, adminToken, initialProgress, apiBase);
 
     // Mark that JavaScript is enabled for graceful degradation
-    window.syncController.checkJavaScriptSupport();
+    syncController.checkJavaScriptSupport();
   </script>
 )}
 
@@ -1425,30 +1410,6 @@ const viewerUrl = `/sync/${id}`;
     font-style: italic;
   }
 
-  /* Debug section (temporary) */
-  .temp-debug {
-    background-color: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    border-radius: 8px;
-    padding: var(--space-lg);
-    margin-top: var(--space-lg);
-  }
-
-  .temp-debug h3 {
-    color: #059669;
-    margin-bottom: var(--space-md);
-    font-size: 1rem;
-  }
-
-  .temp-debug p {
-    color: #059669;
-    margin-bottom: var(--space-sm);
-    font-style: italic;
-  }
-
-  .temp-debug p:last-child {
-    margin-bottom: 0;
-  }
 
   /* Responsive Design */
   @media (max-width: 767px) {

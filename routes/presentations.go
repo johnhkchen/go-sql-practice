@@ -1,19 +1,12 @@
 package routes
 
 import (
-	"crypto/rand"
-	"crypto/subtle"
-	"encoding/hex"
-	// "encoding/json"  // TODO: Re-enable if JSON operations are added
 	"fmt"
 	"net/http"
 
 	"github.com/pocketbase/pocketbase/core"
 )
 
-const (
-	TokenLength = 32  // bytes before encoding, matches sync_sessions.go
-)
 
 // StartLiveResponse is the response for starting a live presentation
 type StartLiveResponse struct {
@@ -81,14 +74,6 @@ func checkPresentationOwnership(presentation, user *core.Record) error {
 	return nil
 }
 
-// generateAdminToken generates a secure random token for session administration
-func generateAdminToken() (string, error) {
-	bytes := make([]byte, TokenLength)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
-}
 
 // progressToStep converts a progress value (0-1) to a step index using the formula:
 // step_index = round(progress * (step_count - 1)) for step_count > 1, else 0
@@ -101,14 +86,6 @@ func progressToStep(progress float64, stepCount int) int {
 	return int(stepProgress + 0.5)
 }
 
-// stepToProgress converts a step index to progress value (0-1) using the formula:
-// progress = step_index / (step_count - 1) for step_count > 1, else 0.0
-func stepToProgress(stepIndex int, stepCount int) float64 {
-	if stepCount <= 1 {
-		return 0.0
-	}
-	return float64(stepIndex) / float64(stepCount-1)
-}
 
 // buildStartLiveResponse constructs the response for starting a live session
 func buildStartLiveResponse(session, presentation *core.Record, token string) StartLiveResponse {
@@ -169,16 +146,6 @@ func buildStatusResponse(presentation, session *core.Record) StatusResponse {
 
 	return response
 }
-
-// validateToken performs constant-time token comparison
-func validateToken(provided, stored string) bool {
-	if len(provided) != len(stored) {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(provided), []byte(stored)) == 1
-}
-
-// Placeholder handler functions - to be implemented in subsequent steps
 
 func handleGetStatus(e *core.RequestEvent, app core.App) error {
 	// Get presentation ID from URL
@@ -313,7 +280,7 @@ func handleStartLive(e *core.RequestEvent, app core.App) error {
 	}
 
 	// Generate admin token
-	adminToken, err := generateAdminToken()
+	adminToken, err := GenerateToken()
 	if err != nil {
 		return e.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to generate admin token",

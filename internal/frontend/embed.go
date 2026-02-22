@@ -16,8 +16,3 @@ func GetFrontendFS() (fs.FS, error) {
 	}
 	return subFS, nil
 }
-
-func FrontendExists() bool {
-	_, err := GetFrontendFS()
-	return err == nil
-}

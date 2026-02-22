@@ -1,22 +1,28 @@
 ---
+const currentPath = Astro.url.pathname;
 ---
 
 <header>
-  <nav>
+  <nav aria-label="Main navigation">
     <div class="nav-container">
       <a href="/" class="nav-brand">Link Bookmarks</a>
 
-      <input type="checkbox" id="nav-toggle" class="nav-toggle" />
-      <label for="nav-toggle" class="nav-toggle-label">
+      <button
+        class="nav-toggle-button"
+        aria-expanded="false"
+        aria-controls="nav-menu"
+        aria-label="Toggle navigation menu"
+        type="button"
+      >
         <span></span>
         <span></span>
         <span></span>
-      </label>
+      </button>
 
-      <ul class="nav-links">
-        <li><a href="/">Home</a></li>
-        <li><a href="/stats">Stats</a></li>
-        <li><a href="/present">Present</a></li>
+      <ul class="nav-links" id="nav-menu">
+        <li><a href="/" aria-current={currentPath === '/' ? 'page' : undefined}>Home</a></li>
+        <li><a href="/stats" aria-current={currentPath === '/stats' ? 'page' : undefined}>Stats</a></li>
+        <li><a href="/present" aria-current={currentPath === '/present' ? 'page' : undefined}>Present</a></li>
       </ul>
     </div>
   </nav>
@@ -58,21 +64,15 @@
     opacity: 0.8;
   }
 
-  .nav-toggle {
+  .nav-toggle-button {
     display: none;
-  }
-
-  .nav-toggle-label {
-    display: none;
-    flex-direction: column;
+    background: none;
+    border: none;
     cursor: pointer;
-    width: 30px;
-    height: 30px;
-    justify-content: center;
-    align-items: center;
+    padding: 0;
   }
 
-  .nav-toggle-label span {
+  .nav-toggle-button span {
     display: block;
     width: 25px;
     height: 3px;
@@ -120,20 +120,25 @@
       padding: 0 var(--space-md);
     }
 
-    .nav-toggle-label {
+    .nav-toggle-button {
       display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      width: 30px;
+      height: 30px;
       order: 2;
     }
 
-    .nav-toggle:checked ~ .nav-toggle-label span:first-child {
+    .nav-toggle-button[aria-expanded="true"] span:first-child {
       transform: rotate(45deg) translateY(9px);
     }
 
-    .nav-toggle:checked ~ .nav-toggle-label span:nth-child(2) {
+    .nav-toggle-button[aria-expanded="true"] span:nth-child(2) {
       opacity: 0;
     }
 
-    .nav-toggle:checked ~ .nav-toggle-label span:last-child {
+    .nav-toggle-button[aria-expanded="true"] span:last-child {
       transform: rotate(-45deg) translateY(-9px);
     }
 
@@ -152,7 +157,7 @@
       transition: max-height 0.3s ease;
     }
 
-    .nav-toggle:checked ~ .nav-links {
+    .nav-links.nav-open {
       max-height: 300px;
     }
 
@@ -169,4 +174,43 @@
       display: none;
     }
   }
+
+  /* Active page indicator */
+  .nav-links a[aria-current="page"] {
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .nav-links a[aria-current="page"]::after {
+    width: 100%;
+  }
 </style>
+
+<script>
+  const toggleButton = document.querySelector('.nav-toggle-button');
+  const navMenu = document.querySelector('#nav-menu');
+
+  if (toggleButton && navMenu) {
+    toggleButton.addEventListener('click', () => {
+      const isExpanded = toggleButton.getAttribute('aria-expanded') === 'true';
+      toggleButton.setAttribute('aria-expanded', (!isExpanded).toString());
+      navMenu.classList.toggle('nav-open');
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('nav')) {
+        toggleButton.setAttribute('aria-expanded', 'false');
+        navMenu.classList.remove('nav-open');
+      }
+    });
+
+    // Close menu when pressing Escape
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        toggleButton.setAttribute('aria-expanded', 'false');
+        navMenu.classList.remove('nav-open');
+      }
+    });
+  }
+</script>

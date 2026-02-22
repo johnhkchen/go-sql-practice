@@ -1,0 +1,144 @@
+---
+export interface Props {
+  title: string;
+  message: string;
+  showRetry?: boolean;
+  backLink?: string;
+  backLabel?: string;
+}
+
+const {
+  title,
+  message,
+  showRetry = true,
+  backLink = '/',
+  backLabel = '← Back to Home'
+} = Astro.props;
+---
+
+<div class="error-state">
+  <div class="error-icon">⚠️</div>
+  <h1 class="error-title">{title}</h1>
+  <p class="error-message">{message}</p>
+  <div class="error-actions">
+    <a href={backLink} class="back-link">{backLabel}</a>
+    {showRetry && (
+      <button onclick="window.location.reload()" class="retry-button">Try Again</button>
+    )}
+  </div>
+</div>
+
+<style>
+  /* Error state styles */
+  .error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    min-height: 50vh;
+  }
+
+  .error-icon {
+    font-size: 3rem;
+    margin-bottom: var(--space-lg);
+    opacity: 0.8;
+  }
+
+  .error-title {
+    font-size: 2rem;
+    margin-bottom: var(--space-md);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+
+  .error-message {
+    font-size: 1.125rem;
+    color: var(--color-text);
+    opacity: 0.8;
+    margin-bottom: var(--space-xl);
+    max-width: 500px;
+    line-height: 1.6;
+  }
+
+  .error-actions {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .back-link,
+  .retry-button {
+    color: var(--color-primary);
+    text-decoration: none;
+    font-weight: 500;
+    padding: var(--space-sm) var(--space-lg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    background-color: transparent;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .back-link:hover,
+  .retry-button:hover {
+    background-color: var(--color-footer);
+    text-decoration: none;
+    border-color: var(--color-primary);
+  }
+
+  .retry-button:active {
+    transform: translateY(1px);
+  }
+
+  /* Responsive design */
+  @media (max-width: 767px) {
+    .error-title {
+      font-size: 1.5rem;
+    }
+
+    .error-message {
+      font-size: 1rem;
+    }
+
+    .error-actions {
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .back-link,
+    .retry-button {
+      width: 200px;
+      text-align: center;
+    }
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .error-state {
+      border: 2px solid var(--color-border);
+      border-radius: var(--border-radius-lg);
+      padding: var(--space-lg);
+    }
+
+    .back-link,
+    .retry-button {
+      border-width: 2px;
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .back-link,
+    .retry-button {
+      transition: none;
+    }
+
+    .retry-button:active {
+      transform: none;
+    }
+  }
+</style>

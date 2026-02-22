@@ -4,40 +4,9 @@ export const prerender = false;
 
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import GoLive from '../../components/GoLive.astro';
+import { API_BASE, FETCH_TIMEOUT, apiFetch, ApiError } from '../../lib/api';
+import type { Presentation, PresentationStatus, PocketBaseResponse } from '../../types/api';
 
-// API configuration
-const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
-const FETCH_TIMEOUT = 5000;
-
-// Interfaces based on research - presentations collection schema
-interface Presentation {
-  id: string;
-  name: string;
-  step_count: number;
-  step_labels: string[] | null;
-  active_session: string | null;
-  created_by: string | null;
-  created: string;
-  updated: string;
-}
-
-interface PresentationStatus {
-  id: string;
-  name: string;
-  step_count: number;
-  step_labels: string[];
-  is_live: boolean;
-  progress: number | null;
-  current_step: number | null;
-}
-
-interface PocketBaseResponse {
-  page: number;
-  perPage: number;
-  totalItems: number;
-  totalPages: number;
-  items: Presentation[];
-}
 
 // Data fetching
 let presentations: Presentation[] = [];
@@ -45,32 +14,21 @@ let error: string | null = null;
 let isLoading = true;
 
 try {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
-  // Fetch presentations using PocketBase collections API
-  const response = await fetch(`${API_BASE}/api/collections/presentations/records?page=1&perPage=50&sort=-created`, {
-    signal: controller.signal,
-    headers: { 'Accept': 'application/json' }
-  });
-
-  clearTimeout(timeoutId);
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-
-  const data: PocketBaseResponse = await response.json();
+  const data = await apiFetch<PocketBaseResponse<Presentation>>(
+    `${API_BASE}/api/collections/presentations/records?page=1&perPage=50&sort=-created`,
+    { timeout: FETCH_TIMEOUT }
+  );
   presentations = data.items;
   isLoading = false;
-
 } catch (fetchError) {
-  if (fetchError instanceof Error) {
-    if (fetchError.name === 'AbortError') {
+  if (fetchError instanceof ApiError) {
+    if (fetchError.code === 'timeout') {
       error = 'Request timed out. Please try again.';
     } else {
       error = `Failed to load presentations: ${fetchError.message}`;
     }
+  } else if (fetchError instanceof Error) {
+    error = `Failed to load presentations: ${fetchError.message}`;
   } else {
     error = 'An unexpected error occurred while loading presentations.';
   }

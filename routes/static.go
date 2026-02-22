@@ -70,13 +70,8 @@ func registerStatic(e *core.ServeEvent) {
 				return nil
 			}
 
-			// If not a ReadSeeker, fall back to copying the content
-			ev.Response.Header().Set("Content-Type", "application/octet-stream")
-			_, err = ev.Response.Write([]byte("file serving not supported"))
-			if err != nil {
-				return err
-			}
-			return nil
+			// If not a ReadSeeker, continue to next handler
+			return ev.Next()
 		},
 		Priority: -500, // Run before other route handlers but after auth
 	})

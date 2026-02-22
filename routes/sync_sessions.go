@@ -1,9 +1,6 @@
 package routes
 
 import (
-	"crypto/rand"
-	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,7 +9,6 @@ import (
 )
 
 const (
-	syncTokenLength = 32  // bytes before encoding
 	progressMin = 0.0
 	progressMax = 1.0
 )
@@ -45,7 +41,7 @@ func registerSyncSessions(e *core.ServeEvent) {
 // handleCreateSession creates a new sync session with an admin token
 func handleCreateSession(e *core.RequestEvent, app core.App) error {
 	// Generate admin token
-	token, err := generateSyncAdminToken()
+	token, err := GenerateToken()
 	if err != nil {
 		return e.JSON(http.StatusInternalServerError, map[string]string{
 			"error": "Failed to generate admin token",
@@ -120,7 +116,7 @@ func handleUpdateProgress(e *core.RequestEvent, app core.App) error {
 
 	// Verify admin token (constant-time comparison)
 	storedToken := record.GetString("admin_token")
-	if !validateSyncToken(adminToken, storedToken) {
+	if !ValidateToken(adminToken, storedToken) {
 		return e.JSON(http.StatusForbidden, map[string]string{
 			"error": "Invalid admin token",
 		})
@@ -136,24 +132,15 @@ func handleUpdateProgress(e *core.RequestEvent, app core.App) error {
 		})
 	}
 
-	// Return the updated session
+	// Return the updated session (admin_token excluded for security)
 	return e.JSON(http.StatusOK, map[string]interface{}{
-		"id":           record.Id,
-		"progress":     record.GetFloat("progress"),
-		"admin_token":  record.GetString("admin_token"),
-		"created":      record.GetDateTime("created").Time(),
-		"updated":      record.GetDateTime("updated").Time(),
+		"id":       record.Id,
+		"progress": record.GetFloat("progress"),
+		"created":  record.GetDateTime("created").Time(),
+		"updated":  record.GetDateTime("updated").Time(),
 	})
 }
 
-// generateSyncAdminToken generates a secure random token
-func generateSyncAdminToken() (string, error) {
-	bytes := make([]byte, syncTokenLength)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
-}
 
 // validateProgress checks if the progress value is within valid range
 func validateProgress(progress float64) error {
@@ -163,10 +150,3 @@ func validateProgress(progress float64) error {
 	return nil
 }
 
-// validateSyncToken performs constant-time token comparison
-func validateSyncToken(provided, stored string) bool {
-	if len(provided) != len(stored) {
-		return false
-	}
-	return subtle.ConstantTimeCompare([]byte(provided), []byte(stored)) == 1
-}

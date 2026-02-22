@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
 

@@ -1,4 +1,6 @@
 ---
+import { API_BASE } from '../lib/api';
+
 interface Props {
   presentationId: string;
 }
@@ -6,7 +8,7 @@ interface Props {
 const { presentationId } = Astro.props;
 ---
 
-<div class="go-live-container">
+<div class="go-live-container" data-api-base={API_BASE}>
   <button type="button" class="go-live-btn" data-presentation-id={presentationId}>
     Go Live
   </button>
@@ -18,12 +20,14 @@ const { presentationId } = Astro.props;
     private button: HTMLButtonElement;
     private status: HTMLElement;
     private presentationId: string;
+    private apiBase: string;
     private isLoading = false;
 
     constructor(container: HTMLElement) {
       this.button = container.querySelector('.go-live-btn') as HTMLButtonElement;
       this.status = container.querySelector('.go-live-status') as HTMLElement;
       this.presentationId = this.button.dataset.presentationId!;
+      this.apiBase = container.dataset.apiBase || '';
 
       this.button.addEventListener('click', () => this.handleGoLive());
     }
@@ -35,7 +39,7 @@ const { presentationId } = Astro.props;
       this.clearStatus();
 
       try {
-        const response = await fetch(`/api/presentations/${this.presentationId}/live`, {
+        const response = await fetch(`${this.apiBase}/api/presentations/${this.presentationId}/live`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

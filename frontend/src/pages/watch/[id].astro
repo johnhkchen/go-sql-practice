@@ -4,6 +4,7 @@ export const prerender = false;
 
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { progressToStep, formatStepDisplay } from '../../utils/stepConversion';
+import { API_BASE, FETCH_TIMEOUT } from '../../lib/api';
 
 // Get presentation ID from URL
 const { id } = Astro.params;
@@ -11,10 +12,6 @@ const { id } = Astro.params;
 if (!id) {
   return Astro.redirect('/404');
 }
-
-// API configuration
-const API_BASE = import.meta.env.PUBLIC_API_URL || 'http://localhost:8090';
-const FETCH_TIMEOUT = 5000;
 
 let presentation = null;
 let error = null;
@@ -570,7 +567,7 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
 </style>
 
 {presentation && (
-  <script client:load define:vars={{
+  <script client:load type="module" define:vars={{
     presentationId: id,
     sessionId: sessionId,
     initialProgress: presentation.progress || 0,
@@ -595,7 +592,8 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
       return display;
     }
 
-    class PresentationAutoViewer {
+    // Import and use PresentationAutoViewer from extracted module
+    import { PresentationAutoViewer } from '../../lib/presentationViewer.js';
       constructor(presentationId, sessionId, initialProgress, stepCount, stepLabels, apiBase, initialState) {
         this.presentationId = presentationId;
         this.sessionId = sessionId;
@@ -641,7 +639,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
         }, 1000);
         this.setupEventListeners();
         this.connect();
-        console.log('PresentationAutoViewer initialized for presentation:', this.presentationId, 'Initial state:', this.currentState);
       }
 
       setupEventListeners() {
@@ -659,12 +656,9 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
         // Debouncing: prevent rapid state changes
         const now = Date.now();
         if (now - this.lastStateChangeTime < this.stateChangeDebounceMs) {
-          console.log(`State change debounced: ${this.currentState} -> ${newState}`);
           return;
         }
         this.lastStateChangeTime = now;
-
-        console.log(`Transitioning from ${this.currentState} to ${newState}`);
 
         // Add transitioning class for fade effect
         if (this.container) {
@@ -683,7 +677,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
             this.container.setAttribute('data-state', newState);
             this.container.classList.remove('transitioning');
           }
-          console.log(`State transition completed: ${newState}`);
         }, 300); // Match CSS transition duration
       }
 
@@ -732,8 +725,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
           this.eventSource.onopen = () => this.handleConnect();
           this.eventSource.onmessage = (event) => this.handleMessage(event);
           this.eventSource.onerror = () => this.handleError();
-
-          console.log('SSE connection established to:', `${this.apiBase}/api/realtime`);
         } catch (error) {
           console.error('Failed to create SSE connection:', error);
           this.handleError();
@@ -741,7 +732,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
       }
 
       handleConnect() {
-        console.log('SSE connection opened');
         this.updateConnectionStatus('connected');
         this.updateLastUpdate('Connected');
         this.reconnectAttempts = 0;
@@ -755,7 +745,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
           const response = await fetch(`${this.apiBase}/api/presentations/${this.presentationId}/status`);
           if (response.ok) {
             const serverPresentation = await response.json();
-            console.log('Server state sync:', serverPresentation);
 
             // Check if server state differs from our current state
             const serverHasActiveSession = serverPresentation.active_session !== null;
@@ -764,7 +753,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
 
             // Mid-session join: server has active session but client is in waiting
             if (serverHasActiveSession && clientInWaitingState) {
-              console.log('Mid-session join detected - transitioning to live');
               this.sessionId = serverPresentation.active_session;
               this.currentProgress = serverPresentation.progress || 0;
 
@@ -780,7 +768,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
 
             // Session ended: server has no session but client thinks it's live
             else if (!serverHasActiveSession && clientInLiveState) {
-              console.log('Session ended detected - transitioning to ended');
               this.transitionToState('ended');
               this.updateConnectionStatus('disconnected');
               this.updateLastUpdate('Presentation has ended');
@@ -791,7 +778,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
             else if (serverHasActiveSession && clientInLiveState &&
                      this.sessionId === serverPresentation.active_session &&
                      Math.abs((serverPresentation.progress || 0) - this.currentProgress) > 0.01) {
-              console.log('Progress sync required');
               this.updateProgress(serverPresentation.progress || 0);
             }
           }
@@ -804,7 +790,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
       handleMessage(event) {
         try {
           const data = JSON.parse(event.data);
-          console.log('SSE message received:', data);
 
           // Handle presentations collection changes (state transitions)
           if (data.collection === 'presentations' &&
@@ -819,7 +804,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
               data.action === 'update' &&
               data.record &&
               data.record.id === this.sessionId) {
-            console.log('Progress update received:', data.record.progress);
             this.updateProgress(data.record.progress);
             this.updateLastUpdate();
           }
@@ -830,9 +814,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
 
       handlePresentationStateChange(presentationRecord) {
         const newActiveSession = presentationRecord.active_session;
-        console.log('Presentation state change:', {
-          currentState: this.currentState,
-          newActiveSession: newActiveSession,
           currentSessionId: this.sessionId
         });
 
@@ -873,7 +854,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
       }
 
       handleError() {
-        console.log('SSE connection error or closed');
         this.updateConnectionStatus('disconnected');
         this.updateLastUpdate('Connection lost');
 
@@ -883,7 +863,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
           this.reconnectAttempts++;
 
           setTimeout(() => {
-            console.log(`Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
             this.updateConnectionStatus('connecting');
             this.updateLastUpdate('Reconnecting...');
             this.connect();
@@ -913,8 +892,6 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
           this.updateStepDisplay(newStep);
           this.announceStepChange(newStep);
         }
-
-        console.log('Progress updated to:', progress, 'Step:', newStep);
       }
 
       updateStepDisplay(newStep) {
@@ -970,7 +947,7 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
     }
 
     // Initialize the presentation auto viewer
-    window.presentationAutoViewer = new PresentationAutoViewer(
+    const presentationAutoViewer = new PresentationAutoViewer(
       presentationId,
       sessionId,
       initialProgress,
@@ -982,8 +959,8 @@ const pageTitle = presentation ? presentation.name : (error ? 'Error' : 'Loading
 
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
-      if (window.presentationAutoViewer) {
-        window.presentationAutoViewer.destroy();
+      if (presentationAutoViewer) {
+        presentationAutoViewer.destroy();
       }
     });
   </script>
